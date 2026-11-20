@@ -1,0 +1,32 @@
+[package]
+name = "ps5scaler"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Real-time capture-card upscaler: wgpu shader pipeline driven from Python"
+
+[lib]
+name = "ps5scaler"
+# cdylib is the Python extension; rlib lets tests/rust link the same code
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3 = "0.30"
+numpy = "0.30"
+wgpu = "30"
+winit = "0.30.13"
+# egui ships without fonts unless asked: without this every label is an empty box
+egui = { version = "0.37", features = ["default_fonts"] }
+egui-wgpu = "0.37"
+egui-winit = "0.37"
+bytemuck = { version = "1", features = ["derive"] }
+half = "2"
+pollster = "0.4"
+
+[dev-dependencies]
+# a stub GPU device, so tests can compile the real shaders without a window
+wgpu = { version = "30", features = ["noop"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"

@@ -1,0 +1,14 @@
+target/
+.venv/
+__pycache__/
+*.pyd
+*.pdb
+*.so
+*.egg-info/
+.pytest_cache/
+last_source.json
+self-test.log
+# packaging output (scripts\build-installer.ps1)
+dist/
+build/
+.venv-build/

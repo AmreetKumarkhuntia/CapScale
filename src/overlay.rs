@@ -1,0 +1,508 @@
+//! In-window UI drawn with egui: the stats overlay and the options panel.
+
+use egui_wgpu::ScreenDescriptor;
+use winit::window::Window;
+
+use crate::params::{Backend, Matrix, Params, Upscaler, Vsync, Zone, MAX_ZONES};
+use crate::shared::{Stats, PASS_NAMES};
+
+/// Something the options panel asked for that the panel cannot do itself.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Action {
+    None,
+    PickSource,
+    PickLut,
+    ClearLut,
+    Save,
+}
+
+const OUTPUT_SIZES: [(&str, (u32, u32)); 4] = [
+    ("Fit window", (0, 0)),
+    ("1920 x 1080", (1920, 1080)),
+    ("2560 x 1440", (2560, 1440)),
+    ("3840 x 2160", (3840, 2160)),
+];
+
+pub struct Overlay {
+    ctx: egui::Context,
+    state: egui_winit::State,
+    renderer: egui_wgpu::Renderer,
+    jobs: Vec<egui::ClippedPrimitive>,
+    screen: ScreenDescriptor,
+    free: Vec<egui::TextureId>,
+    /// One id per HUD zone for its on-screen frame. egui remembers where a frame was
+    /// dragged by id, so a new zone needs a new id or it would appear where an old one was.
+    zone_ids: Vec<u64>,
+    next_zone_id: u64,
+    /// Where the picture sat in the window when those frames were placed.
+    zone_image: [f32; 4],
+}
+
+impl Overlay {
+    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat, window: &Window) -> Self {
+        let ctx = egui::Context::default();
+        let state = egui_winit::State::new(
+            ctx.clone(),
+            egui::ViewportId::ROOT,
+            window,
+            Some(window.scale_factor() as f32),
+            None,
+            Some(device.limits().max_texture_dimension_2d as usize),
+        );
+        Self {
+            ctx,
+            state,
+            renderer: egui_wgpu::Renderer::new(device, format, Default::default()),
+            jobs: Vec::new(),
+            screen: ScreenDescriptor {
+                size_in_pixels: [1, 1],
+                pixels_per_point: 1.0,
+            },
+            free: Vec::new(),
+            zone_ids: Vec::new(),
+            next_zone_id: 0,
+            zone_image: [0.0; 4],
+        }
+    }
+
+    /// Feed a window event to the UI. Returns (the UI used it, it wants a redraw).
+    pub fn on_event(&mut self, window: &Window, event: &winit::event::WindowEvent) -> (bool, bool) {
+        let response = self.state.on_window_event(window, event);
+        (response.consumed, response.repaint)
+    }
+
+    pub fn wants_keyboard(&self) -> bool {
+        self.ctx.egui_wants_keyboard_input()
+    }
+
+    /// Build this frame's UI and upload its geometry. The panel edits `params` in
+    /// place. Returns what the panel asked for, and whether the UI is mid-animation
+    /// and wants another frame straight away.
+    #[allow(clippy::too_many_arguments)]
+    pub fn prepare(
+        &mut self,
+        window: &Window,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        size_in_pixels: [u32; 2],
+        image: [f32; 4],
+        params: &mut Params,
+        stats: &Stats,
+    ) -> (Action, bool) {
+        // `image`: where the picture sits in the window (x, y, width, height in pixels).
+        // The zone frames are placed from it, so when it moves they are placed afresh.
+        if image != self.zone_image {
+            self.zone_image = image;
+            self.zone_ids.clear();
+        }
+        self.zone_ids.truncate(params.zones.len());
+        while self.zone_ids.len() < params.zones.len() {
+            self.zone_ids.push(self.next_zone_id);
+            self.next_zone_id += 1;
+        }
+        let zone_ids = &self.zone_ids;
+
+        let input = self.state.take_egui_input(window);
+        let mut action = Action::None;
+        let mut out = self.ctx.run_pass(input, |ctx| {
+            if params.overlay {
+                stats_ui(ctx, stats, &params.note, &params.hint);
+            }
+            if params.panel {
+                action = panel_ui(ctx, params, stats);
+                if params.edit_zones {
+                    let scale = 1.0 / ctx.pixels_per_point();
+                    let picture = egui::Rect::from_min_size(
+                        egui::pos2(image[0], image[1]) * scale,
+                        egui::vec2(image[2], image[3]) * scale,
+                    );
+                    zones_ui(ctx, &mut params.zones, zone_ids, picture);
+                }
+            }
+        });
+        self.state
+            .handle_platform_output(window, out.platform_output);
+        let animating = out
+            .viewport_output
+            .get(&egui::ViewportId::ROOT)
+            .is_some_and(|v| v.repaint_delay.is_zero());
+        self.jobs = self.ctx.tessellate(out.shapes, out.pixels_per_point);
+        self.screen = ScreenDescriptor {
+            size_in_pixels,
+            pixels_per_point: out.pixels_per_point,
+        };
+        for (id, deltas) in &out.textures_delta.set {
+            for delta in deltas {
+                self.renderer.update_texture(device, queue, *id, delta);
+            }
+        }
+        self.free = out.textures_delta.free.iter().copied().collect();
+        out.textures_delta.clear(); // egui asserts on drop that deltas were handled
+        self.renderer
+            .update_buffers(device, queue, encoder, &self.jobs, &self.screen);
+        (action, animating)
+    }
+
+    /// Draw the prepared UI into the final pass.
+    pub fn paint(&mut self, pass: &mut wgpu::RenderPass<'static>) {
+        self.renderer.render(pass, &self.jobs, &self.screen);
+        for id in self.free.drain(..) {
+            self.renderer.free_texture(&id);
+        }
+    }
+}
+
+/// Each HUD zone as a red frame over the picture that can be dragged and resized.
+fn zones_ui(ctx: &egui::Context, zones: &mut [Zone], ids: &[u64], picture: egui::Rect) {
+    let red = egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 60, 60));
+    for (zone, id) in zones.iter_mut().zip(ids) {
+        let [left, top, right, bottom] = zone.rect;
+        let placed = egui::Rect::from_min_max(
+            picture.min + egui::vec2(left, top) * picture.size(),
+            picture.min + egui::vec2(right, bottom) * picture.size(),
+        );
+        let shown = egui::Window::new("HUD zone")
+            .id(egui::Id::unique(("hud zone", *id)))
+            .title_bar(false)
+            .resizable(true)
+            .default_rect(placed)
+            .min_size([16.0, 16.0])
+            .frame(egui::Frame::new().stroke(if zone.ellipse {
+                egui::Stroke::NONE
+            } else {
+                red
+            }))
+            .show(ctx, |ui| {
+                let (area, _) = ui.allocate_exact_size(ui.available_size(), egui::Sense::hover());
+                if zone.ellipse {
+                    ui.painter().add(egui::epaint::EllipseShape::stroke(
+                        area.center(),
+                        area.size() / 2.0,
+                        red,
+                    ));
+                }
+            });
+        if let Some(shown) = shown {
+            let now = shown.response.rect;
+            let (min, max) = (
+                (now.min - picture.min) / picture.size(),
+                (now.max - picture.min) / picture.size(),
+            );
+            let moved = [min.x, min.y, max.x, max.y];
+            // going to screen points and back wobbles in the last digits; only a real
+            // drag should count as a change
+            if moved
+                .iter()
+                .zip(zone.rect)
+                .any(|(a, b)| (a - b).abs() > 1e-4)
+            {
+                zone.rect = moved;
+            }
+        }
+    }
+}
+
+fn stats_ui(ctx: &egui::Context, s: &Stats, note: &str, hint: &str) {
+    egui::Area::new(egui::Id::unique("stats"))
+        .fixed_pos([8.0, 8.0])
+        .interactable(false)
+        .show(ctx, |ui| {
+            egui::Frame::new()
+                .fill(egui::Color32::from_black_alpha(180))
+                .inner_margin(egui::Margin::same(8))
+                .corner_radius(4.0)
+                .show(ui, |ui| {
+                    ui.style_mut().override_text_style = Some(egui::TextStyle::Monospace);
+                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend); // one stat per line, never wrapped
+                    ui.visuals_mut().override_text_color = Some(egui::Color32::from_gray(235));
+                    if s.frames == 0 {
+                        ui.label("waiting for frames...");
+                    }
+                    if s.multiple > 1 {
+                        ui.label(format!(
+                            "game {:4.1} fps  x{} = {:.0} fps shown   render {:5.1} fps",
+                            s.content_fps,
+                            s.multiple,
+                            s.content_fps * s.multiple as f32,
+                            s.render_fps
+                        ));
+                    } else {
+                        ui.label(format!(
+                            "capture {:5.1} fps   render {:5.1} fps",
+                            s.capture_fps, s.render_fps
+                        ));
+                    }
+                    ui.label(format!(
+                        "added latency  decode {:.1} + present {:.1} = {:.1} ms",
+                        s.decode_ms,
+                        s.present_ms,
+                        s.decode_ms + s.present_ms
+                    ));
+                    if s.low_fps > 0.0 {
+                        // the slowest 1% of pictures over the last 10 s: close to the
+                        // render rate means even pacing, well below it means stutter
+                        ui.label(format!("steadiness     1% low {:.1} fps", s.low_fps));
+                    }
+                    ui.label(format!(
+                        "{}  ->  {}x{} {}  [{}]",
+                        s.source, s.output.0, s.output.1, s.upscaler, s.present_mode
+                    ));
+                    if s.gpu_timing {
+                        let passes: Vec<String> = PASS_NAMES
+                            .iter()
+                            .zip(s.pass_ms)
+                            .filter(|(_, ms)| *ms > 0.0)
+                            .map(|(name, ms)| format!("{name} {ms:.2}"))
+                            .collect();
+                        ui.label(format!(
+                            "gpu ms  {}  = {:.2}",
+                            passes.join("  "),
+                            s.pass_ms.iter().sum::<f32>()
+                        ));
+                    } else {
+                        ui.label("gpu ms  n/a (no timestamp queries on this adapter)");
+                    }
+                    if !s.error.is_empty() {
+                        ui.colored_label(egui::Color32::from_rgb(255, 110, 110), &s.error);
+                    }
+                    if !note.is_empty() {
+                        ui.label(note);
+                    }
+                    if !hint.is_empty() {
+                        ui.weak(hint);
+                    }
+                });
+        });
+}
+
+fn section(ui: &mut egui::Ui, title: &str, open: bool, body: impl FnOnce(&mut egui::Ui)) {
+    egui::CollapsingHeader::new(title)
+        .default_open(open)
+        .show(ui, body);
+}
+
+fn slider(ui: &mut egui::Ui, value: &mut f32, range: std::ops::RangeInclusive<f32>, text: &str) {
+    ui.add(egui::Slider::new(value, range).text(text));
+}
+
+fn panel_ui(ctx: &egui::Context, p: &mut Params, s: &Stats) -> Action {
+    let mut action = Action::None;
+    egui::Window::new("Options")
+        // on the right: the left side is where the stats box and most minimaps are,
+        // and the HUD zones have to be dragged onto the minimap
+        .default_pos([ctx.content_rect().right() - 380.0, 40.0])
+        .default_width(340.0)
+        .default_height(900.0) // tall enough to show every section; egui keeps it on screen
+        .vscroll(true)
+        .show(ctx, |ui| {
+            section(ui, "Source", true, |ui| {
+                ui.label(if s.frames == 0 {
+                    "no frames yet"
+                } else {
+                    s.source.as_str()
+                });
+                if ui.button("Change source...").clicked() {
+                    action = Action::PickSource;
+                }
+                // how the card's YUV is decoded; "auto" trusts what each frame reports
+                ui.horizontal(|ui| {
+                    ui.label("Range");
+                    ui.selectable_value(&mut p.full_range, None, "auto");
+                    ui.selectable_value(&mut p.full_range, Some(false), "limited");
+                    ui.selectable_value(&mut p.full_range, Some(true), "full");
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Matrix");
+                    ui.selectable_value(&mut p.matrix, None, "auto");
+                    ui.selectable_value(&mut p.matrix, Some(Matrix::Bt601), "bt601");
+                    ui.selectable_value(&mut p.matrix, Some(Matrix::Bt709), "bt709");
+                });
+            });
+
+            section(ui, "Output", true, |ui| {
+                let current = OUTPUT_SIZES
+                    .iter()
+                    .find(|(_, size)| *size == p.out_size)
+                    .map_or_else(
+                        || format!("{} x {}", p.out_size.0, p.out_size.1),
+                        |(label, _)| label.to_string(),
+                    );
+                egui::ComboBox::from_label("render size")
+                    .selected_text(current)
+                    .show_ui(ui, |ui| {
+                        for (label, size) in OUTPUT_SIZES {
+                            ui.selectable_value(&mut p.out_size, size, label);
+                        }
+                    });
+                ui.checkbox(&mut p.fullscreen, "Borderless fullscreen");
+                ui.horizontal(|ui| {
+                    ui.label("Present");
+                    for v in Vsync::ALL {
+                        ui.selectable_value(&mut p.vsync, v, v.name());
+                    }
+                });
+                // fixed once the window exists: Save, then restart, to switch
+                ui.horizontal(|ui| {
+                    ui.label("Graphics API (next start)");
+                    for b in Backend::ALL {
+                        ui.selectable_value(&mut p.backend, b, b.name());
+                    }
+                });
+                ui.label(format!("now: {}", s.adapter));
+            });
+
+            section(ui, "Frame rate", true, |ui| {
+                // a 30 fps game arrives inside a 60 Hz signal with every frame repeated
+                ui.horizontal(|ui| {
+                    ui.label("Current (game)");
+                    ui.selectable_value(&mut p.content_fps, 0.0, "auto");
+                    ui.selectable_value(&mut p.content_fps, 30.0, "30");
+                    ui.selectable_value(&mut p.content_fps, 60.0, "60");
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Target");
+                    ui.selectable_value(&mut p.target_fps, 0.0, "off");
+                    for fps in [60.0, 90.0, 120.0, 180.0] {
+                        ui.selectable_value(&mut p.target_fps, fps, format!("{fps:.0}"));
+                    }
+                });
+                // off: the built-in method. The AI model needs its runtime installed;
+                // until then both switches are greyed out.
+                ui.add_enabled_ui(p.ai_available, |ui| {
+                    ui.checkbox(&mut p.ai_framegen, "AI frames (RIFE)")
+                        .on_hover_text("On: generated frames come from the RIFE model. Off: the built-in method.")
+                        .on_disabled_hover_text("Not installed. Run scripts/install-ai.ps1 (about 4 GB), then restart.");
+                });
+                ui.add_enabled_ui(p.ai_available && p.ai_framegen, |ui| {
+                    ui.checkbox(&mut p.ai_still, "AI: leave still areas untouched")
+                        .on_hover_text("On: where nothing moves, a generated frame shows the real picture. Off: the model draws everything.");
+                });
+                ui.horizontal(|ui| {
+                    ui.label("HUD zones");
+                    let room = p.zones.len() < MAX_ZONES;
+                    // placed where a minimap usually is; drag them to fit
+                    if ui.add_enabled(room, egui::Button::new("+ box")).clicked() {
+                        p.zones.push(Zone {
+                            rect: [0.02, 0.70, 0.20, 0.97],
+                            ellipse: false,
+                        });
+                        p.edit_zones = true;
+                    }
+                    if ui.add_enabled(room, egui::Button::new("+ circle")).clicked() {
+                        p.zones.push(Zone {
+                            rect: [0.02, 0.67, 0.19, 0.97],
+                            ellipse: true,
+                        });
+                        p.edit_zones = true;
+                    }
+                    if ui.add_enabled(!p.zones.is_empty(), egui::Button::new("remove last")).clicked() {
+                        p.zones.pop();
+                    }
+                });
+                ui.checkbox(&mut p.edit_zones, "Show and move zones");
+                ui.label(format!(
+                    "{} zone(s). Inside a zone generated frames show the real picture, so a minimap or HUD cannot smear.",
+                    p.zones.len()
+                ));
+                ui.label(if p.target_fps <= 0.0 {
+                    "Frame generation is off.".to_string()
+                } else if s.multiple > 1 {
+                    // the real frame waits while the generated ones before it are shown
+                    let wait = 1000.0 / s.content_fps.max(1.0) * (s.multiple - 1) as f32
+                        / s.multiple as f32;
+                    format!(
+                        "Generating {}x: {:.0} -> {:.0} fps, about {wait:.0} ms extra delay.",
+                        s.multiple,
+                        s.content_fps,
+                        s.content_fps * s.multiple as f32
+                    )
+                } else {
+                    format!(
+                        "Game is at {:.0} fps: already at the target, nothing to generate.",
+                        s.capture_fps
+                    )
+                });
+            });
+
+            section(ui, "Upscale and sharpen", true, |ui| {
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut p.upscale, "Upscaler");
+                    for u in Upscaler::ALL {
+                        ui.selectable_value(&mut p.upscaler, u, u.label());
+                    }
+                });
+                ui.checkbox(&mut p.rcas, "AMD FSR 1 sharpening (RCAS)");
+                slider(ui, &mut p.sharpness, 0.0..=2.0, "sharpness (0 = sharpest)");
+            });
+
+            section(ui, "Colour", true, |ui| {
+                ui.checkbox(&mut p.grade, "Colour grading");
+                slider(ui, &mut p.exposure, -3.0..=3.0, "exposure (stops)");
+                slider(ui, &mut p.contrast, 0.5..=2.0, "contrast");
+                slider(ui, &mut p.saturation, 0.0..=2.0, "saturation");
+                slider(ui, &mut p.vibrance, -1.0..=1.0, "vibrance");
+                slider(ui, &mut p.temperature, -1.0..=1.0, "temperature");
+                slider(ui, &mut p.tint, -1.0..=1.0, "tint");
+                slider(ui, &mut p.gamma, 0.5..=2.0, "gamma");
+                // one slider drives all three channels; per-channel values come from config.toml
+                for (triple, range, text) in [
+                    (&mut p.lift, -0.25..=0.25, "lift"),
+                    (&mut p.lgg_gamma, 0.5..=2.0, "lgg gamma"),
+                    (&mut p.gain, 0.5..=2.0, "gain"),
+                ] {
+                    let mut v = triple[0];
+                    slider(ui, &mut v, range, text);
+                    if v != triple[0] {
+                        *triple = [v; 3];
+                    }
+                }
+            });
+
+            section(ui, "LUT", true, |ui| {
+                ui.checkbox(&mut p.lut, "Apply 3D LUT");
+                ui.label(if p.lut_path.is_empty() {
+                    "none loaded"
+                } else {
+                    p.lut_path.as_str()
+                });
+                ui.horizontal(|ui| {
+                    if ui.button("Load .cube...").clicked() {
+                        action = Action::PickLut;
+                    }
+                    if !p.lut_path.is_empty() && ui.button("Clear").clicked() {
+                        action = Action::ClearLut;
+                    }
+                });
+                slider(ui, &mut p.lut_strength, 0.0..=1.0, "strength");
+            });
+
+            section(ui, "Audio", true, |ui| {
+                ui.checkbox(&mut p.audio, "Game audio");
+                slider(ui, &mut p.volume, 0.0..=1.5, "volume");
+                slider(
+                    ui,
+                    &mut p.audio_delay_ms,
+                    0.0..=300.0,
+                    "delay ms (if sound leads picture)",
+                );
+            });
+
+            section(ui, "Debug", false, |ui| {
+                ui.checkbox(&mut p.overlay, "Stats overlay");
+                ui.checkbox(&mut p.split, "Before / after split (drag the divider)");
+                ui.label(format!("GPU: {}", s.adapter));
+            });
+
+            ui.separator();
+            ui.horizontal(|ui| {
+                if ui.button("Save to config.toml").clicked() {
+                    action = Action::Save;
+                }
+                if ui.button("Reset look").clicked() {
+                    p.reset_look();
+                }
+            });
+        });
+    action
+}
