@@ -104,13 +104,14 @@ under `[params]`.
 method with the open-source [RIFE](https://github.com/hzwer/Practical-RIFE) model, run on an
 NVIDIA RTX card. It is a neural network trained on real video, where the built-in
 method is a block search; try both on your game. It is not part of the app; install
-it once with
+it once by ticking **Download AI frame generation** in the installer, or later from
+the **CapScale AI setup** Start-menu entry. From source, run
 
 ```
 scripts\install-ai.ps1
 ```
 
-which puts about 4 GB (NVIDIA's CUDA and TensorRT libraries, ONNX Runtime and the
+Either way it puts about 4 GB (NVIDIA's CUDA and TensorRT libraries, ONNX Runtime and the
 model) in `%LOCALAPPDATA%\CapScale\ai`. Delete that folder to remove it. Until it
 is installed the switch is greyed out.
 
@@ -120,7 +121,7 @@ is installed the switch is greyed out.
   it does not fit (30 to 120, or a 60 fps game to 120), the built-in method is used
   and the stats overlay says so.
 - The first use of a capture size prepares the model for the graphics card, which
-  takes a minute or two (the installer does this for 1080p). The built-in method
+  takes a minute or two (`install-ai.ps1` from source does this for 1080p). The built-in method
   runs meanwhile.
 - Where the picture is at rest (a menu, a still scene, a large HUD panel) the
   generated frame is the real picture, untouched. Small still things on top of

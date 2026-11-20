@@ -472,7 +472,7 @@ fn panel_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources, tab
                 ui.add_enabled_ui(p.ai_available, |ui| {
                     ui.checkbox(&mut p.ai_framegen, "AI frames (RIFE)")
                         .on_hover_text("On: generated frames come from the RIFE model. Off: the built-in method.")
-                        .on_disabled_hover_text("Not installed. Run scripts/install-ai.ps1 (about 4 GB), then restart.");
+                        .on_disabled_hover_text("Not installed. Run CapScale AI setup from the Start menu (about 4 GB), then restart.");
                 });
                 ui.add_enabled_ui(p.ai_available && p.ai_framegen, |ui| {
                     ui.checkbox(&mut p.ai_still, "AI: leave still areas untouched")
