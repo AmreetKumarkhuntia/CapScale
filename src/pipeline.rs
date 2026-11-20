@@ -275,8 +275,6 @@ impl Pipeline {
         index: usize,
     ) -> Result<wgpu::RenderPipeline, String> {
         let source = shaders.source(FILES[index])?;
-        // validation errors land in the scope instead of panicking, so a typo in a
-        // hot-reloaded shader is reported and the old pipeline keeps running
         let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(FILES[index]),
@@ -504,8 +502,6 @@ impl Pipeline {
         self.chain.as_ref()?;
         queue.write_buffer(&self.globals_buf, 0, bytemuck::bytes_of(globals));
 
-        // A new frame goes into the older of the two slots, so the one before it stays
-        // available for frame generation.
         let first = self.converted == 0;
         if step.new_frame || first {
             self.newest ^= 1;
@@ -514,9 +510,6 @@ impl Pipeline {
         }
         let c = self.chain.as_ref()?;
         let newest = self.newest;
-        // Without frame generation every draw converts again, so a change of colour
-        // decoding shows at once. With it, a second conversion could pick up a frame
-        // that arrived in between and break the pair being interpolated.
         if step.new_frame || first || !step.generating {
             self.run(
                 encoder,
@@ -541,7 +534,6 @@ impl Pipeline {
                     }
                 }
             }
-            // motion from the smallest level up, each level refining the one before
             for level in (0..levels).rev() {
                 passes.push((FLOW, &gen.bg_flow[newest][level], &gen.flow[level]));
             }
@@ -561,7 +553,6 @@ impl Pipeline {
         };
         self.run(encoder, upscaler, input, &c.a, timing.writes(SLOT_UPSCALE));
 
-        // the rest ping-pong between the two output-size targets; a disabled pass is skipped
         let mut in_a = true;
         for (on, shader, slot) in [
             (p.rcas, RCAS, SLOT_RCAS),

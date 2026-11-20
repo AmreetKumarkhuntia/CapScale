@@ -86,7 +86,6 @@ impl Gpu {
 
     /// One draw of the whole chain into the test target, read back as RGB 0..1.
     fn draw(&mut self, step: Step) -> Image {
-        // everything after frame generation switched off or left at identity
         let mut params = Params::default();
         (params.upscale, params.rcas, params.grade, params.lut) = (false, false, false, false);
         params.zones = self.zones.clone();
@@ -270,7 +269,6 @@ fn frames_pass_through_unchanged_and_generated_frames_follow_the_motion() {
         "the real frame follows the generated one untouched"
     );
 
-    // what you get without motion search: the two frames faded together
     let faded: Image = older
         .iter()
         .zip(&newer)
@@ -281,7 +279,6 @@ fn frames_pass_through_unchanged_and_generated_frames_follow_the_motion() {
             .map(|i| image[i])
             .collect()
     };
-    // share of pixels that are visibly wrong (any channel off by more than 10%)
     let visibly_wrong = |image: &Image| {
         let bad = image
             .iter()
@@ -291,7 +288,6 @@ fn frames_pass_through_unchanged_and_generated_frames_follow_the_motion() {
         bad as f32 * 100.0 / image.len() as f32
     };
 
-    // open background, panning 14 px right and 6 px down per frame
     let background = |image: &Image| {
         psnr(
             &crop(image, 200..600, 240..340),
@@ -309,7 +305,6 @@ fn frames_pass_through_unchanged_and_generated_frames_follow_the_motion() {
         "motion search should clearly beat a cross-fade: {ours:.1} vs {fade:.1} dB"
     );
 
-    // the HUD does not move, so it must not be dragged along with the background
     let hud = psnr(
         &crop(&generated, 24..176, 24..56),
         &crop(&between, 24..176, 24..56),
@@ -317,9 +312,6 @@ fn frames_pass_through_unchanged_and_generated_frames_follow_the_motion() {
     eprintln!("static HUD: {hud:.1} dB");
     assert!(hud > 40.0, "static HUD was disturbed: {hud:.1} dB");
 
-    // Whole picture. What is left wrong is the ball, which is small and moves against
-    // the background (the search follows the background there), and a strip at the
-    // edges where new picture slides in. Both are known limits, kept from growing here.
     let (ours, fade) = (visibly_wrong(&generated), visibly_wrong(&faded));
     eprintln!(
         "visibly wrong pixels: generated {ours:.1}%, cross-fade {fade:.1}% (whole-frame PSNR {:.1} vs {:.1} dB)",
@@ -350,7 +342,6 @@ fn hard_scene(time: f32, noisy: bool) -> Image {
     for py in 0..H {
         for px in 0..W {
             let (x, y) = (px as f32 + 0.5, py as f32 + 0.5);
-            // undo the camera to find which point of the world this pixel shows
             let (dx, dy) = ((x - cx) / zoom, (y - cy) / zoom);
             let (wx, wy) = (
                 cx + dx * cos + dy * sin - 6.0 * time,
@@ -373,7 +364,6 @@ fn hard_scene(time: f32, noisy: bool) -> Image {
                 ];
             }
             rgb = rgb.map(|c| c * (1.0 + 0.03 * time));
-            // HUD: a panel of fine "text", and a one-pixel crosshair in the middle
             if (16..200).contains(&px) && (16..52).contains(&py) {
                 let ink = hash(px as i32 / 2, py as i32 / 3) > 0.55 && py % 9 < 6;
                 rgb = if ink { [0.95; 3] } else { [0.05, 0.05, 0.08] };
@@ -419,9 +409,6 @@ fn damage(image: &Image, truth: &Image) -> (f32, f32) {
 
 #[test]
 fn overlays_stay_steady_in_a_noisy_scene() {
-    // What made generated frames flicker on real footage: with noise in the picture, a
-    // still HUD or crosshair came out right in one generated frame and wrong in the
-    // next. Every frame of a run has to hold up, not the average.
     let Some(mut gpu) = Gpu::new() else {
         eprintln!("no GPU here, skipping");
         return;
@@ -484,7 +471,6 @@ fn a_hud_zone_shows_the_real_frame_while_the_rest_is_generated() {
         eprintln!("no GPU here, skipping");
         return;
     };
-    // a box over the lower right, and a circle over the lower left like a minimap
     gpu.zones = vec![
         Zone {
             rect: [0.6, 0.6, 0.9, 0.9],
@@ -511,27 +497,22 @@ fn a_hud_zone_shows_the_real_frame_while_the_rest_is_generated() {
             .map(|i| image[i])
             .collect()
     };
-    // well inside the box (x 384..576, y 216..324) the picture is the newer real frame
     let in_box = (400..560, 230..310);
     let real = psnr(
         &crop(&generated, in_box.0.clone(), in_box.1.clone()),
         &crop(&newer, in_box.0.clone(), in_box.1.clone()),
     );
-    // the middle of the circle (centre 96, 279)
     let in_circle = (76..116, 250..310);
     let round = psnr(
         &crop(&generated, in_circle.0.clone(), in_circle.1.clone()),
         &crop(&newer, in_circle.0.clone(), in_circle.1.clone()),
     );
-    // A corner of the bounding box of the circle lies outside the circle itself, so it
-    // is generated like the rest: closer to the true in-between picture than to the real frame.
     let corner = (148..158, 218..228);
     let cut = |image: &Image| crop(image, corner.0.clone(), corner.1.clone());
     let (as_generated, as_real) = (
         psnr(&cut(&generated), &cut(&between)),
         psnr(&cut(&generated), &cut(&newer)),
     );
-    // open picture away from both zones
     let open = psnr(
         &crop(&generated, 250..350, 60..160),
         &crop(&between, 250..350, 60..160),

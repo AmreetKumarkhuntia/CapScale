@@ -53,7 +53,6 @@ impl Fmt {
         let (cw, ch) = (w.div_ceil(2), h.div_ceil(2));
         match self {
             Fmt::Nv12 => vec![(R8Unorm, w, h, 1), (Rg8Unorm, cw, ch, 2)],
-            // one texel holds a pixel pair: Y0 U Y1 V
             Fmt::Yuy2 => vec![(Rgba8Unorm, cw, h, 4)],
             Fmt::I420 => vec![
                 (R8Unorm, w, h, 1),

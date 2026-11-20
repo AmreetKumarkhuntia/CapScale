@@ -21,19 +21,19 @@ from collections import deque
 
 import numpy as np
 
-LEVEL = 14  # brightness steps; pixels changing by less than this are not counted
-MEMORY = 0.9  # per frame of one parity: the comparison looks back about two thirds of a second
-FLOOR = 60.0  # counted pixels; a difference smaller than this is not evidence of anything
-PATIENCE = 12  # frames a new reading has to last before it is believed
+LEVEL = 14
+MEMORY = 0.9
+FLOOR = 60.0
+PATIENCE = 12
 
 
 def luma_of(data, fmt: str, width: int, height: int) -> np.ndarray:
     """The brightness plane of a frame, as capture or the test pattern hands it over."""
     if isinstance(data, (tuple, list)):
-        return data[0]  # planar: Y is the first plane
+        return data[0]
     if fmt == "yuy2":
         return data.reshape(height, width, 2)[..., 0]
-    return data[: width * height].reshape(height, width)  # nv12: Y comes first
+    return data[: width * height].reshape(height, width)
 
 
 class Cadence:
@@ -41,12 +41,11 @@ class Cadence:
         self.prev: np.ndarray | None = None
         self.index = 0
         self.recent: deque[int] = deque(maxlen=32)
-        # per parity: running mean and variance of how much each frame changed
         self.mean = [0.0, 0.0]
         self.var = [0.0, 0.0]
         self.seen = [0, 0]
-        self.halved = False  # True: every picture arrives twice
-        self.keep = 0  # which parity is passed on while halved
+        self.halved = False
+        self.keep = 0
         self._want: tuple[bool, int] | None = None
         self._streak = 0
 
@@ -55,7 +54,6 @@ class Cadence:
         grid = np.ascontiguousarray(luma[::2, ::2])
         change = 0
         if self.prev is not None and self.prev.shape == grid.shape:
-            # |a - b| without leaving uint8
             change = int(np.count_nonzero(np.maximum(grid, self.prev) - np.minimum(grid, self.prev) > LEVEL))
         self.prev = grid
         return self.feed(change, forced)
@@ -73,17 +71,14 @@ class Cadence:
         self.var[parity] = MEMORY * (self.var[parity] + (1 - MEMORY) * off * off)
         self.seen[parity] += 1
 
-        # How far apart the two parities are, measured against how much each one
-        # wanders by itself. Scene noise adds to both means alike and drops out.
         gap = self.mean[0] - self.mean[1]
         wander = math.sqrt((self.var[0] + self.var[1]) * (1 - MEMORY) / (1 + MEMORY)) + 1.0
         want: tuple[bool, int] | None = None
         if min(self.seen) >= 4:
             if abs(gap) > 4 * wander and abs(gap) > FLOOR:
-                want = (True, 0 if gap > 0 else 1)  # one parity changes, the other repeats
+                want = (True, 0 if gap > 0 else 1)
             elif abs(gap) < 1.5 * wander and min(self.mean) - min(self.recent) > FLOOR:
-                want = (False, 0)  # both change, and by more than their quietest moment
-            # else: the picture is still, which says nothing about the rhythm
+                want = (False, 0)
         if forced is False:
             want = (False, 0)
         elif forced:
@@ -96,9 +91,6 @@ class Cadence:
             self._streak = self._streak + 1 if want == self._want else 1
             self._want = want
             told = forced is not None and want[0] != self.halved
-            # Changing parity is done on a frame the new parity keeps. Done on the other
-            # one, that picture would have been dropped by the old choice a frame ago
-            # and by the new choice now, and never shown.
             safe = not (self.halved and want[0]) or parity == want[1]
             if (told or self._streak >= PATIENCE) and safe:
                 self.halved, self.keep = want

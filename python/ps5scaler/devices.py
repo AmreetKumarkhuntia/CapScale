@@ -9,12 +9,11 @@ import av
 import av.logging
 
 BACKEND = "dshow" if sys.platform == "win32" else "v4l2"
-# formats the renderer can take, best first: raw ones skip the CPU decode
 PREFERRED = ("nv12", "yuyv422", "mjpeg")
 
 
 class Mode(NamedTuple):
-    fmt: str  # "mjpeg", or a raw pixel format such as "nv12" / "yuyv422"
+    fmt: str
     width: int
     height: int
     max_fps: float
@@ -24,8 +23,6 @@ def list_devices() -> list[tuple[str, str]]:
     """(name, label) per video device: name opens it, label is what a person reads."""
     devs = av.enumerate_input_devices(BACKEND)
     if BACKEND == "dshow":
-        # shortcut: two identical cards share a name and only the first opens;
-        # key on d.name (the PnP path) if that ever matters
         return [(d.description, d.description) for d in devs if "video" in d.media_types]
     return [(d.name, f"{d.description} ({d.name})") for d in devs]
 
@@ -42,7 +39,7 @@ def _log_of(url: str, options: dict[str, str]) -> str:
         with av.logging.Capture() as logs:
             try:
                 av.open(url, format=BACKEND, options=options).close()
-            except av.FFmpegError:  # expected: a listing ends with "immediate exit requested"
+            except av.FFmpegError:
                 pass
         return "".join(str(entry[-1]) for entry in logs)
     finally:
@@ -52,12 +49,10 @@ def _log_of(url: str, options: dict[str, str]) -> str:
 _DSHOW = re.compile(
     r"(?:vcodec|pixel_format)=(\S+)\s+min s=\d+x\d+ fps=[\d.]+ max s=(\d+)x(\d+) fps=([\d.]+)"
 )
-# the description field can hold colons itself ("YUYV 4:2:2"), so anchor on the sizes at the line's end
 _V4L2 = re.compile(r"(?:Raw|Compressed)\s*:\s*(\S+)\s*:.*:((?:\s*\d+x\d+)+)\s*$", re.M)
 
 
 def parse_dshow_modes(text: str) -> list[Mode]:
-    # a card lists the same size several times with different rate caps; keep the fastest
     fastest: dict[tuple[str, int, int], float] = {}
     for fmt, w, h, fps in _DSHOW.findall(text):
         key = (fmt, int(w), int(h))
@@ -67,7 +62,6 @@ def parse_dshow_modes(text: str) -> list[Mode]:
 
 
 def parse_v4l2_modes(text: str) -> list[Mode]:
-    # V4L2's listing has no frame rates; 60 is offered and the driver clamps it
     modes = {
         Mode(fmt, int(w), int(h), 60.0)
         for fmt, sizes in _V4L2.findall(text)

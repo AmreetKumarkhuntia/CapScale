@@ -44,7 +44,6 @@ pub fn parse_cube(text: &str) -> Result<Cube, String> {
             "LUT_1D_SIZE" => return Err("1D LUTs are not supported, only LUT_3D_SIZE".into()),
             "DOMAIN_MIN" => cube.domain_min = triple(words, i + 1)?,
             "DOMAIN_MAX" => cube.domain_max = triple(words, i + 1)?,
-            // TITLE and vendor keywords carry nothing we use
             word if word.starts_with(|c: char| c.is_ascii_alphabetic()) => {}
             _ => cube.data.push(triple(line.split_whitespace(), i + 1)?),
         }

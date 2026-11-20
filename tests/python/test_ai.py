@@ -7,7 +7,7 @@ import pytest
 
 from ps5scaler import ai
 
-PERIOD = 0.04  # seconds a game frame lasts in these tests
+PERIOD = 0.04
 
 
 class Renderer:
@@ -28,7 +28,6 @@ class Model:
         pass
 
     def generate(self, older, newer, when, matrix, full_range, keep_still):
-        # stands in for the in-between picture: a value between the two frames'
         return tuple(((1 - when) * a + when * b).astype(np.uint8) for a, b in zip(older, newer))
 
 
@@ -39,7 +38,7 @@ def frame(value):
 
 def started(renderer, model=Model):
     gen = ai.FrameGen(renderer, model)
-    assert not gen.submit(frame(0), "i420", 4, 4, None, None, 0.0, 2, PERIOD)  # still loading: the caller shows it
+    assert not gen.submit(frame(0), "i420", 4, 4, None, None, 0.0, 2, PERIOD)
     deadline = time.monotonic() + 2
     while gen.model is None and not gen.failed and time.monotonic() < deadline:
         time.sleep(0.002)
@@ -69,13 +68,13 @@ def test_frames_are_spread_evenly_over_the_game_frame():
         gen.submit(frame(value), "i420", 4, 4, None, None, 0.0, 4, PERIOD)
         time.sleep(PERIOD)
     gen.close()
-    gaps = np.diff(times[1:])  # three generated frames, then the real one
+    gaps = np.diff(times[1:])
     assert len(gaps) == 3 and np.allclose(gaps, PERIOD / 4, atol=0.004)
 
 
 def test_a_model_too_slow_for_the_rate_is_not_used():
     class Slow(Model):
-        took = PERIOD  # one frame takes as long as a whole game frame
+        took = PERIOD
 
     renderer = Renderer()
     gen = started(renderer, Slow)
@@ -123,9 +122,9 @@ def test_hud_zones_keep_the_real_picture():
     real = tuple(np.full(s, 200, np.uint8) for s in ((40, 40), (20, 20), (20, 20)))
     ai.keep_zones(made, real, [(0.0, 0.0, 0.5, 0.5, False), (0.5, 0.5, 1.0, 1.0, True)])
     y, u, _ = made
-    assert (y[:20, :20] == 200).all() and (u[:10, :10] == 200).all()  # the box
-    assert y[30, 30] == 200 and y[21, 21] == 0 and u[15, 15] == 200  # the circle: its middle, not its corner
-    assert y[30, 5] == 0 and y[5, 30] == 0  # outside both
+    assert (y[:20, :20] == 200).all() and (u[:10, :10] == 200).all()
+    assert y[30, 30] == 200 and y[21, 21] == 0 and u[15, 15] == 200
+    assert y[30, 5] == 0 and y[5, 30] == 0
 
 
 @pytest.mark.skipif(not ai.available(), reason="AI runtime not installed (scripts/install-ai.ps1)")

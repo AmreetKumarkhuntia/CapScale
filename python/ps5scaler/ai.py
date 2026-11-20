@@ -25,9 +25,9 @@ import numpy as np
 
 PACK = Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "share") / "PS5 Scaler" / "ai"
 SITE = PACK / "site"
-MODEL = PACK / "rife_yuv420.onnx"  # made by scripts/build_ai_model.py
+MODEL = PACK / "rife_yuv420.onnx"
 
-Planes = tuple[np.ndarray, np.ndarray, np.ndarray]  # Y, then U and V at half size; 8 bits
+Planes = tuple[np.ndarray, np.ndarray, np.ndarray]
 
 
 def available() -> bool:
@@ -37,8 +37,7 @@ def available() -> bool:
 @functools.cache
 def runtime():
     """ONNX Runtime from PACK."""
-    sys.path.append(str(SITE))  # last, so the app's own packages win
-    # Windows looks for the NVIDIA libraries only where it is told to
+    sys.path.append(str(SITE))
     for folder in {p.parent for p in SITE.glob("nvidia/**/*.dll")} | {SITE / "tensorrt_libs"}:
         os.add_dll_directory(str(folder))
         os.environ["PATH"] = f"{folder}{os.pathsep}{os.environ.get('PATH', '')}"
@@ -74,22 +73,20 @@ class Model:
             options.add_free_dimension_override_by_name(name, value)
         tensorrt = {
             "trt_fp16_enable": True,
-            # preparing the model for this GPU and frame size takes a minute or two; kept for next time
             "trt_engine_cache_enable": True,
             "trt_engine_cache_path": str(PACK / "engines"),
         }
         self.session = ort.InferenceSession(
             str(MODEL), options, providers=[("TensorrtExecutionProvider", tensorrt), "CUDAExecutionProvider"]
         )
-        # ONNX Runtime quietly falls back to the processor, at a second a frame
         if self.session.get_providers()[0] != "TensorrtExecutionProvider":
             raise RuntimeError("the AI runtime could not start on the graphics card")
         blank = (np.zeros((height, width), np.uint8), *[np.full((height // 2, width // 2), 128, np.uint8)] * 2)
-        self.generate(blank, blank, 0.5)  # the first run does the preparing
+        self.generate(blank, blank, 0.5)
         began = time.perf_counter()
         for _ in range(5):
             self.generate(blank, blank, 0.5)
-        self.took = (time.perf_counter() - began) / 5  # seconds a frame
+        self.took = (time.perf_counter() - began) / 5
 
     def generate(
         self, older: Planes, newer: Planes, when: float, matrix: str = "bt709", full_range: bool = False, keep_still: bool = True
@@ -108,7 +105,7 @@ def planes_of(data, fmt: str, width: int, height: int) -> Planes | None:
     if width % 2 or height % 2:
         return None
     half = (height // 2, width // 2)
-    if fmt == "i420":  # rows may be padded
+    if fmt == "i420":
         return tuple(np.array(p[:rows, :cols]) for p, (rows, cols) in zip(data, ((height, width), half, half)))
     if fmt == "nv12":
         chroma = data[width * height :].reshape(*half, 2)
@@ -150,9 +147,9 @@ class FrameGen(threading.Thread):
         self.renderer, self._new_model = renderer, model
         self.jobs: queue.Queue = queue.Queue()
         self.size: tuple[int, int] | None = None
-        self.model = None  # loaded, for `size`
+        self.model = None
         self.failed = False
-        self.status = ""  # one line for the overlay
+        self.status = ""
         self.older: tuple[Planes, float] | None = None
         self.start()
 
@@ -167,7 +164,6 @@ class FrameGen(threading.Thread):
         model = self.model
         if model is None:
             return False
-        # a generated frame has to be ready within its slot
         if model.took > period / multiple:
             self.status = f"AI frames: {model.took * 1e3:.0f} ms each, too slow for this rate - built-in used"
             return False
@@ -203,8 +199,6 @@ class FrameGen(threading.Thread):
 
     def _show(self, model, planes, width, height, full_range, matrix, decode_ms, multiple, period, arrived) -> None:
         def push(frame: Planes, behind: float = 0.0) -> None:
-            # how old the picture is when shown: the wait in here, and for a generated
-            # frame also how far its moment lies before the frame that just arrived
             late = (time.perf_counter() - arrived + behind) * 1e3
             self.renderer.push_frame(
                 frame, fmt="i420", width=width, height=height, full_range=full_range, matrix=matrix,
@@ -212,8 +206,6 @@ class FrameGen(threading.Thread):
             )  # fmt: skip
 
         older, self.older = self.older, (planes, arrived)
-        # not after a gap (the method was just switched on), and not when the next
-        # frame is already waiting: then this one goes out as it is, to catch up
         follows = older is not None and arrived - older[1] < 3 * period and older[0][0].shape == planes[0].shape
         if follows and self.jobs.empty():
             step, first = period / multiple, 0.0
@@ -230,7 +222,7 @@ class FrameGen(threading.Thread):
                     _sleep_until(first + (i - 1) * step)
                     push(made, (multiple - i) * step)
                 _sleep_until(first + (multiple - 1) * step)
-            except Exception as e:  # the real frame still goes out, and built-in takes over
+            except Exception as e:
                 self.failed = True
                 self.status = f"AI frames stopped: {str(e).splitlines()[0][:120]}"
         push(planes)
@@ -248,13 +240,12 @@ def _check(width: int, height: int) -> int:
 
     rng = np.random.default_rng(7)
     blocks = np.kron(rng.integers(40, 216, (height // 16 + 8, width // 16 + 8), np.uint8), np.ones((16, 16), np.uint8))
-    for _ in range(3):  # soften the block edges
+    for _ in range(3):
         blocks = ((blocks.astype(np.uint16) + np.roll(blocks, 2, 0) + np.roll(blocks, 2, 1) + np.roll(blocks, (2, 2), (0, 1))) // 4).astype(np.uint8)
 
-    def frame(shift: int) -> Planes:  # a pan to the right and down
+    def frame(shift: int) -> Planes:
         y = blocks[40 - shift // 2 : 40 - shift // 2 + height, 40 - shift : 40 - shift + width]
         chroma = y.reshape(height // 2, 2, width // 2, 2).mean((1, 3))
-        # mild colour, so that nothing falls outside what RGB can hold
         return np.ascontiguousarray(y), (144 - chroma / 8).astype(np.uint8), (112 + chroma / 8).astype(np.uint8)
 
     def db(a: np.ndarray, b: np.ndarray) -> float:
@@ -275,7 +266,6 @@ def _check(width: int, height: int) -> int:
     print(f"moving picture against the true in-between frame: {moving:.1f} dB (plain cross-fade: {fade:.1f} dB)")
     print(f"still picture kept as it is: brightness {still_y:.1f} dB, colour {still_c:.1f} dB (120 = identical)")
     print(f"still picture with that switched off, drawn by the model: {drawn:.1f} dB")
-    # the switch has to reach the model: off, the still picture is close but no longer identical
     good = moving > fade + 10 and still_y > 100 and still_c > 100 and 38 < drawn < 100
     print("OK" if good else "FAILED: the model's output is not what it should be")
     return 0 if good else 1

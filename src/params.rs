@@ -282,7 +282,6 @@ impl Params {
             "capture" => &mut self.capture,
             "fullscreen" => &mut self.fullscreen,
             "audio" => &mut self.audio,
-            // show the HUD zone outlines on the picture for dragging
             "zones" => &mut self.edit_zones,
             _ => {
                 return Err(format!(
@@ -352,7 +351,6 @@ impl Params {
     /// [audio]), holding the current values.
     /// `panel` and `capture` are left out on purpose: they are window state, not settings.
     pub fn to_toml(&self) -> String {
-        // numbers as TOML floats; a bare `1` would come back as an integer
         let f = |v: f32| format!("{v:?}");
         let v3 = |v: [f32; 3]| {
             if v[0] == v[1] && v[1] == v[2] {
@@ -375,7 +373,6 @@ impl Params {
                         .unwrap_or_default()
             }
         };
-        // each zone: left, top, right, bottom as fractions of the picture, then 1.0 for an ellipse
         let zones = self
             .zones
             .iter()
@@ -448,7 +445,6 @@ impl Params {
             v3(self.lift),
             v3(self.lgg_gamma),
             v3(self.gain),
-            // Rust's quoted form doubles the backslashes of a Windows path, as TOML needs
             format_args!("{:?}", self.lut_path),
             f(self.lut_strength),
             f(self.split_pos),
@@ -541,7 +537,6 @@ impl Globals {
                 f.layout,
                 p.split as u32,
                 p.zones.len().min(MAX_ZONES) as u32,
-                // one bit per zone: 1 = ellipse
                 p.zones
                     .iter()
                     .take(MAX_ZONES)
@@ -561,7 +556,6 @@ pub fn yuv_rows(matrix: Matrix, full_range: bool) -> [[f32; 4]; 3] {
         Matrix::Bt709 => (0.2126, 0.0722),
     };
     let kg = 1.0 - kr - kb;
-    // limited range: luma 16..235, chroma 16..240, of 255
     let (y_scale, y_off, c_scale) = if full_range {
         (1.0, 0.0, 1.0)
     } else {
@@ -589,7 +583,6 @@ pub fn yuv_rows(matrix: Matrix, full_range: bool) -> [[f32; 4]; 3] {
 }
 
 /// White balance as RGB gains, normalised so grey keeps its brightness.
-// shortcut: plain channel gains, not a chromatic adaptation; switch to Bradford if tints look off
 pub fn wb_gains(temperature: f32, tint: f32) -> [f32; 3] {
     let g = [
         1.0 + 0.25 * temperature,

@@ -6,7 +6,6 @@ import time
 import numpy as np
 
 FORMATS = ("nv12", "yuy2", "i420")
-# white, yellow, cyan, green, magenta, red, blue, black
 BARS = [(1, 1, 1), (1, 1, 0), (0, 1, 1), (0, 1, 0), (1, 0, 1), (1, 0, 0), (0, 0, 1), (0, 0, 0)]
 
 
@@ -19,7 +18,6 @@ class Pattern:
         if fmt not in FORMATS:
             raise ValueError(f"test pattern format must be one of {FORMATS}")
         self.fmt, self.width, self.height, self.fps = fmt, width, height, fps
-        # like a 30 fps game on a 60 Hz output: the picture only changes every `hold` frames
         self.hold = max(1, round(fps / (content_fps or fps)))
 
     def close(self) -> None:
@@ -31,9 +29,8 @@ class Pattern:
         top = h * 2 // 3
         for i, colour in enumerate(BARS):
             rgb[:top, i * w // 8 : (i + 1) * w // 8] = colour
-        rgb[top:] = np.linspace(0, 1, w, dtype=np.float32)[None, :, None]  # grey ramp
+        rgb[top:] = np.linspace(0, 1, w, dtype=np.float32)[None, :, None]
 
-        # BT.709 limited range, the usual for raw HD capture
         r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
         y = 0.2126 * r + 0.7152 * g + 0.0722 * b
         luma = np.round(16 + 219 * y).astype(np.uint8)
@@ -49,7 +46,7 @@ class Pattern:
         while True:
             x = (frame // self.hold * self.hold * 8) % (w - 8)
             moving = luma.copy()
-            moving[:, x : x + 8] = 235  # sweeping bar: shows pacing and dropped frames
+            moving[:, x : x + 8] = 235
             if fmt == "nv12":
                 data = np.concatenate([moving.ravel(), chroma_nv12])
             elif fmt == "yuy2":

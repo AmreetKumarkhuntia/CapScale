@@ -1,6 +1,5 @@
 from ps5scaler.devices import Mode, best_mode, parse_dshow_modes, parse_v4l2_modes
 
-# what ffmpeg's dshow "list_options" printed for a real UVC capture card
 DSHOW = (
     'DirectShow video device options (from video devices)\n Pin "Capture" (alternative pin name "0")\n'
     "  vcodec=mjpeg  min s=1920x1080 fps=15 max s=1920x1080 fps=60.0002\n"
@@ -31,7 +30,6 @@ def test_v4l2_modes():
 
 def test_best_mode_prefers_raw_only_when_it_is_fast_enough():
     modes = parse_dshow_modes(DSHOW)
-    # YUY2 exists at 1080p but only at 5 fps, so 60 fps has to be MJPEG
     assert best_mode(modes, 1920, 1080, 60).fmt == "mjpeg"
     assert best_mode(modes, 1920, 1080, 5).fmt == "yuyv422"
     assert best_mode(modes, 1280, 720, 60).fmt == "nv12"

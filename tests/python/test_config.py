@@ -27,7 +27,7 @@ def test_save_replaces_only_the_given_sections(tmp_path):
     assert data["capture"] == {"device": "Card"} and data["hotkeys"] == {"F1": "toggle:panel"}
     assert "# keep me" in text and text.count("[params]") == 1
 
-    config.save_sections(path, SAVED)  # saving twice must not pile sections up
+    config.save_sections(path, SAVED)
     assert tomllib.loads(path.read_text()) == data
 
 

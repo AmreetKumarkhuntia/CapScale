@@ -24,7 +24,6 @@ def match_input(names: list[str], needle: str) -> int | None:
 def find_devices(video_device: str, wanted: str = "") -> tuple[int, int] | None:
     """(input, output) device numbers: the card's sound input and the default output."""
     apis = sd.query_hostapis()
-    # WASAPI is the low-latency path on Windows; elsewhere take the system default
     api = next((i for i, a in enumerate(apis) if "WASAPI" in a["name"]), sd.default.hostapi)
     inputs = [(i, d["name"]) for i, d in enumerate(sd.query_devices()) if d["hostapi"] == api and d["max_input_channels"]]
     hit = match_input([name for _, name in inputs], wanted or video_device)
@@ -59,7 +58,6 @@ class Audio:
         self.volume, self.delay_ms, self.muted = 1.0, 0.0, False
         self.glitches = 0
         self.peak = 0.0
-        # room for the longest delay plus the largest block the driver may hand over
         self._delay = DelayLine(CHANNELS, RATE * MAX_DELAY_MS // 1000 + RATE // 4)
         self.stream = sd.Stream(
             device=found,
@@ -67,7 +65,6 @@ class Audio:
             channels=CHANNELS,
             dtype="float32",
             latency="low",
-            # lets Windows convert if a device runs at another rate or channel count
             extra_settings=sd.WasapiSettings(auto_convert=True) if sys.platform == "win32" else None,
             callback=self._callback,
         )

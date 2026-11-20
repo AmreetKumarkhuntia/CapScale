@@ -14,10 +14,8 @@ from . import ai, config, devices
 from ._core import frame_plan
 from .repeats import Cadence, luma_of
 
-# True inside the packaged PS5Scaler.exe
 FROZEN = getattr(sys, "frozen", False)
 
-# what the overlay's hint line calls each action
 HINTS = {"toggle:panel": "settings", "toggle:split": "split", "stop": "close", "quit": "quit"}
 
 
@@ -26,7 +24,6 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--list-devices", action="store_true", help="print capture devices and their modes")
     p.add_argument("--config", help="path to config.toml (default: see README)")
     p.add_argument("--self-test", action="store_true", help=argparse.SUPPRESS)
-    # older shortcuts pass it; the settings window now always opens
     p.add_argument("--pick", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--device", help="capture device name (starts capturing right away)")
     p.add_argument("--size", help="capture size, e.g. 1920x1080")
@@ -63,7 +60,7 @@ def _self_test(log: Path) -> int:
 
         from . import Renderer, audio, capture, pattern, picker  # noqa: F401
 
-        if ai.available():  # optional, installed apart from the app: can this build run it?
+        if ai.available():
             ai.Model(1920, 1080)
 
         shaders = Path(__file__).with_name("shaders")
@@ -128,7 +125,6 @@ def _open(src: dict, pattern_fmt: str | None):
     if pattern_fmt:
         from .pattern import Pattern
 
-        # "i420:30" = a 30 fps picture inside the capture rate, every frame repeated
         fmt, _, content = pattern_fmt.partition(":")
         return Pattern(fmt, src["width"], src["height"], src["fps"], float(content or src["fps"]))
     from .capture import Capture
@@ -152,9 +148,6 @@ class _Pump(threading.Thread):
         self.renderer, self.src, self.pattern_fmt, self.gen = renderer, src, pattern_fmt, gen
         self.stopping = threading.Event()
         self.error: Exception | None = None
-        # set by the main loop from the options: (frame generation on, the game's own
-        # frame rate if the user gave one, else 0 = work it out, the rate to show,
-        # the AI method is chosen)
         self.framegen = (False, 0.0, 0.0, False)
         self.start()
 
@@ -168,11 +161,8 @@ class _Pump(threading.Thread):
                     if self.stopping.is_set():
                         break
                     on, content, target, want_ai = self.framegen
-                    by_ai = False  # True: the AI model shows this frame and the ones leading up to it
+                    by_ai = False
                     if on:
-                        # With frame generation the renderer gets each of the game's
-                        # frames once, not the repeats that pad them out to the capture
-                        # rate. A rate given by the user settles which it is.
                         forced = None if content <= 0 else content < capture_fps * 0.75
                         keep = cadence.step(luma_of(data, fmt, w, h), forced)
                         game_fps = capture_fps / 2 if cadence.halved else capture_fps
@@ -196,7 +186,7 @@ class _Pump(threading.Thread):
                         )
             finally:
                 source.close()
-        except Exception as e:  # reported by the main loop, which then retries
+        except Exception as e:
             self.error = e
 
     def stop(self) -> None:
@@ -212,7 +202,7 @@ def _start_audio(src: dict, pattern_fmt: str | None):
         from .audio import Audio
 
         return Audio(src["device"], src.get("audio_device", ""))
-    except Exception as e:  # no sound is not a reason to stop the picture
+    except Exception as e:
         print(f"audio: {e}", file=sys.stderr)
         return None
 
@@ -228,13 +218,11 @@ def _hint(cfg: dict, audio=None) -> str:
 def _list_sources(renderer, src: dict, pattern_fmt: str | None) -> dict:
     """Send the capture devices to the settings window's Source tab, with `src` picked.
     Returns each device's modes by name."""
-    if pattern_fmt:  # the colour bars stand in for a device
+    if pattern_fmt:
         found = [(src["device"], f"test pattern {pattern_fmt}")]
         modes = {src["device"]: [devices.Mode(pattern_fmt, src["width"], src["height"], float(src["fps"]))]}
     else:
         found = devices.list_devices()
-        # shortcut: probes every device's modes at start and on Refresh; probe on
-        # selection instead if someone has many devices
         modes = {name: devices.list_modes(name) for name, _ in found}
     renderer.set_sources(
         [(name, label, [(m.width, m.height, m.max_fps) for m in modes[name]]) for name, label in found],
@@ -278,10 +266,10 @@ def main(argv: list[str] | None = None) -> int:
     last_path = cfg_path.with_name("last_source.json")
     src = _capture_from(cfg, args)
     saved = _read_json(last_path)
-    if saved and not src["device"]:  # preselect the source started last time
+    if saved and not src["device"]:
         src.update(saved)
 
-    from . import Renderer  # late, so --list-devices works without a GPU
+    from . import Renderer
 
     out = _output_from(cfg, args)
     r = Renderer(*out["out_size"], fullscreen=out["fullscreen"], vsync=out["vsync"], backend=out["backend"])
@@ -290,14 +278,13 @@ def main(argv: list[str] | None = None) -> int:
     _apply(r, cfg, args)
     watcher = config.Watcher(cfg_path)
     last_error, retried_at = "", 0.0
-    # capture runs only while the picture window is open
     pump: _Pump | None = None
     audio = None
 
     def stop() -> None:
         nonlocal pump, audio
         if pump:
-            pump.stop()  # the device has one owner at a time
+            pump.stop()
             pump = None
         if audio:
             audio.close()
@@ -312,7 +299,7 @@ def main(argv: list[str] | None = None) -> int:
         r.toggle_pass("capture", True)
 
     modes = _list_sources(r, src, args.test_pattern)
-    if args.device or args.test_pattern:  # named on the command line: no need to wait for Start
+    if args.device or args.test_pattern:
         start()
 
     try:
@@ -320,11 +307,10 @@ def main(argv: list[str] | None = None) -> int:
             time.sleep(0.02)
             if pump:
                 pump.framegen = r.framegen
-            if audio:  # the settings window owns these; playback follows it
+            if audio:
                 on, audio.volume, audio.delay_ms = r.audio
                 audio.muted = not on
             for kind, value in r.poll_events():
-                # the window reports keys; which key does what is decided here
                 action = cfg["hotkeys"].get(value, "") if kind == "key" else kind
                 if action in ("quit", "closed"):
                     return 0
@@ -339,7 +325,7 @@ def main(argv: list[str] | None = None) -> int:
                     start()
                 elif action == "stop":
                     stop()
-                    r.toggle_pass("capture", False)  # the settings window comes back with it
+                    r.toggle_pass("capture", False)
                 elif action == "refresh_sources":
                     modes = _list_sources(r, src, args.test_pattern)
                 elif action == "pick_source":
@@ -382,14 +368,13 @@ def main(argv: list[str] | None = None) -> int:
                 message = str(pump.error or "capture ended")
                 if message != last_error:
                     print(f"capture: {message} - retrying", file=sys.stderr)
-                    # also on screen: started from a shortcut there is no console to read
                     r.set_params(hint=f"capture: {message} - retrying")
                     last_error = message
                 time.sleep(1.0)
                 pump = _Pump(r, src, args.test_pattern, gen)
                 retried_at = time.monotonic()
-            elif last_error and time.monotonic() - retried_at > 3:  # a failed open dies well within this
-                r.set_params(hint=_hint(cfg, audio))  # puts the normal hint line back
+            elif last_error and time.monotonic() - retried_at > 3:
+                r.set_params(hint=_hint(cfg, audio))
                 last_error = ""
     except KeyboardInterrupt:
         return 0
@@ -415,5 +400,4 @@ def gui(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    # pythonw (the shortcut) has no stderr
     sys.exit(gui() if sys.stderr is None else main())

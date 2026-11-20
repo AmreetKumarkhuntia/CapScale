@@ -16,9 +16,6 @@ import onnx
 from onnx import TensorProto as T
 from onnx import helper, numpy_helper
 
-# Average change of an 8x8 cell between the two frames, in 8-bit brightness steps:
-# up to REST the cell is at rest, from MOVING on it is in motion, in between a blend.
-# Capture noise alone gives about 1 to 2.5.
 REST, MOVING = 3.0, 6.0
 
 
@@ -45,7 +42,6 @@ def wrap(src: str, dst: str) -> None:
         moved = op("Add", [op("MatMul", [rows, mat], out + "_mul"), offset], out + "_add")
         return op("Transpose", [moved], out, perm=[0, 3, 1, 2])
 
-    # in: both frames as Y, U, V planes -> RGB 0..1
     pictures = []
     for k in "01":
         y, u, v = (
@@ -55,39 +51,29 @@ def wrap(src: str, dst: str) -> None:
             "Resize",
             [op("Concat", [u, v], "c" + k, axis=1), "", const("yuv_twice" + k, [1, 1, 2, 2])],
             f"c{k}_up",
-            # each chroma sample repeated 2x2: averaging 2x2 on the way out then gives a
-            # still picture its own chroma back exactly, so it cannot shimmer
             mode="nearest",
             nearest_mode="floor",
             coordinate_transformation_mode="asymmetric",
         )
         yuv = op("Div", [op("Concat", [y, chroma], "yuv" + k, axis=1), plane], f"yuv{k}_n")
         pictures.append(op("Clip", [matrix(yuv, "to_rgb", "rgb_offset", "rgb" + k), zero, one], f"rgb{k}_c"))
-    # the moment to generate, as a third "picture" of one channel
     when = op("Add", [op("Mul", ["y0_4", zero], "when_0"), "t"], "when")
     nodes.append(helper.make_node("Concat", [*pictures, when], [rife_in], name="yuv_in", axis=1))
     before = len(nodes)
 
-    # out: RGB -> Y at full size, U and V at half size
     size = op("Shape", ["y0"], "size")
     cut = op(
         "Slice",
         [rife_out, const("yuv_origin", [0, 0], np.int64), size, const("yuv_hw", [2, 3], np.int64)],
-        "made",  # the model pads to a multiple of 32
+        "made",
     )
     yuv = matrix(op("Clip", [cut, zero, one], "made_c"), "to_yuv", "yuv_offset", "made_yuv")
     channel = const("yuv_channel", [1], np.int64)
 
-    # Where the picture is at rest, the frame to make is the real one. The model would
-    # soften sharp still things a little (a HUD, a menu), which shows as shimmer when
-    # real and generated frames alternate; taken from the real frame they stay exact.
-    # "At rest" is judged over 8x8 cells and spread by 40 px: something thin crossing a
-    # flat background leaves the pixels in between unchanged, and must count as moving.
     change = op("Abs", [op("Sub", ["y0_4", "y1_4"], "diff")], "change")
     cells = op("AveragePool", [change], "cells", kernel_shape=[8, 8], strides=[8, 8])
     spread = op("MaxPool", [cells], "spread", kernel_shape=[11, 11], pads=[5, 5, 5, 5])
     ramp = op("Div", [op("Sub", [spread, const("yuv_rest", REST)], "over"), const("yuv_ramp", MOVING - REST)], "ramp")
-    # `still` = 0 switches the rule off: everything then counts as moving
     gate = op("Max", [op("Clip", [ramp, zero, one], "ramp_c"), op("Sub", [one, "still"], "always")], "gate")
     moving = op("Resize", [gate, "", "", op("Shape", ["y0_4"], "size4")], "moving", mode="linear")
     moving_half = op("AveragePool", [moving], "moving_half", kernel_shape=[2, 2], strides=[2, 2])
@@ -99,7 +85,6 @@ def wrap(src: str, dst: str) -> None:
         mixed = op("Add", [real, op("Mul", [apart, weight], out + "_part")], out + "_mix")
         up = op("Add", [mixed, const("yuv_half_" + out, 0.5)], out + "_r")
         whole = op("Clip", [op("Floor", [up], out + "_fl"), zero, plane], out + "_cl")
-        # the cast comes last: TensorRT allows 8-bit values only as the model's own inputs and outputs
         op("Cast", [op("Squeeze", [whole, squeeze], out + "_sq")], out, to=T.UINT8)
 
     luma = op("Slice", [yuv, const("yuv_s0", [0], np.int64), const("yuv_e1", [1], np.int64), channel], "made_y")
@@ -117,7 +102,6 @@ def wrap(src: str, dst: str) -> None:
         g.input.extend(helper.make_tensor_value_info(p + k, T.UINT8, ["h2", "w2"]) for p in "uv")
     g.input.append(helper.make_tensor_value_info("t", T.FLOAT, [1]))
     g.input.append(helper.make_tensor_value_info("still", T.FLOAT, [1]))
-    # row vectors: pixel * matrix + offset
     for name in ("to_rgb", "to_yuv"):
         g.input.append(helper.make_tensor_value_info(name, T.FLOAT, [3, 3]))
     for name in ("rgb_offset", "yuv_offset"):

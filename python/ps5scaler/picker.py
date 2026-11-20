@@ -7,16 +7,16 @@ from tkinter import filedialog, messagebox
 
 
 def _root(title: str) -> tk.Tk:
-    if sys.platform == "win32":  # otherwise Windows bitmap-scales the popup and it looks blurry
+    if sys.platform == "win32":
         import ctypes
 
         try:
             ctypes.windll.shcore.SetProcessDpiAwareness(2)
-        except OSError:  # already set, e.g. by the render window
+        except OSError:
             pass
     root = tk.Tk()
     root.title(title)
-    root.attributes("-topmost", True)  # stay above the borderless fullscreen window
+    root.attributes("-topmost", True)
     return root
 
 

@@ -22,18 +22,16 @@ def segment(px, py, ax, ay, bx, by):
 def draw(size: int) -> np.ndarray:
     """RGBA image, drawn 4x oversize and averaged down for smooth edges."""
     n = size * 4
-    y, x = np.mgrid[0:n, 0:n] / n  # 0..1
-    # rounded square
+    y, x = np.mgrid[0:n, 0:n] / n
     r = 0.22
     qx, qy = np.abs(x - 0.5) - (0.5 - r), np.abs(y - 0.5) - (0.5 - r)
     tile = np.hypot(np.maximum(qx, 0), np.maximum(qy, 0)) + np.minimum(np.maximum(qx, qy), 0) - r <= -0.02
-    # arrow: shaft from lower left to upper right, plus the two head strokes
     arrow = np.minimum.reduce([
         segment(x, y, 0.30, 0.70, 0.70, 0.30),
         segment(x, y, 0.70, 0.30, 0.42, 0.30),
         segment(x, y, 0.70, 0.30, 0.70, 0.58),
     ]) <= 0.055
-    blend = ((x + (1 - y)) / 2)[..., None]  # 0 lower left .. 1 upper right
+    blend = ((x + (1 - y)) / 2)[..., None]
     colour = (1 - blend) * np.array([36, 99, 235]) + blend * np.array([147, 51, 234])
     rgba = np.zeros((n, n, 4))
     rgba[..., :3] = np.where(arrow[..., None], 255, colour)
@@ -67,7 +65,6 @@ def main() -> None:
     out = struct.pack("<HHH", 0, 1, len(images))
     offset = 6 + 16 * len(images)
     for size, data in zip(SIZES, images):
-        # width/height bytes: 0 means 256
         out += struct.pack("<BBBBHHII", size % 256, size % 256, 0, 0, 1, 32, len(data), offset)
         offset += len(data)
     path = Path(__file__).with_name("icon.ico")

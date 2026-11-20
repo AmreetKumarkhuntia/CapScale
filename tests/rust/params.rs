@@ -133,12 +133,9 @@ fn toggles_and_names() {
 
 #[test]
 fn frame_generation_plan() {
-    // a 30 fps game inside a 60 Hz signal, measured with some wobble, shown at 60
     assert_eq!(frame_plan(0.0, 29.6, 60.0), (2, 1.0 / 30.0));
     assert_eq!(frame_plan(30.0, 0.0, 120.0), (4, 1.0 / 30.0));
-    // only whole multiples: 100 on 30 fps content is 3x
     assert_eq!(frame_plan(30.0, 0.0, 100.0).0, 3);
-    // off, already at target, or nothing measured yet
     assert_eq!(frame_plan(0.0, 30.0, 0.0).0, 1);
     assert_eq!(frame_plan(60.0, 0.0, 60.0).0, 1);
     assert_eq!(frame_plan(0.0, 0.0, 60.0).0, 1);
@@ -151,7 +148,6 @@ fn frame_generation_plan() {
 fn hud_zones_reach_the_shader_and_the_saved_config() {
     let mut p = Params {
         zones: vec![
-            // given upside down and partly off the picture: clamp() tidies it
             Zone {
                 rect: [0.25, 0.9, -0.5, 0.5],
                 ellipse: false,
@@ -178,7 +174,7 @@ fn hud_zones_reach_the_shader_and_the_saved_config() {
             phase: 0.5,
         },
     );
-    assert_eq!((g.flags[2], g.flags[3]), (2, 0b10)); // two zones, the second is an ellipse
+    assert_eq!((g.flags[2], g.flags[3]), (2, 0b10));
     assert_eq!(g.zones[1], [0.5, 0.5, 0.75, 1.0]);
     assert!(p
         .to_toml()

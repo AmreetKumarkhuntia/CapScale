@@ -9,16 +9,14 @@ import numpy as np
 
 from .devices import BACKEND, open_url
 
-# raw packets from the card: handed to the GPU without decoding
 RAW = {"nv12": "nv12", "yuyv422": "yuy2"}
-# what the MJPEG decoder produces
 PLANAR = {
     "yuv420p": "i420", "yuvj420p": "i420",
     "yuv422p": "i422", "yuvj422p": "i422",
     "yuv444p": "i444", "yuvj444p": "i444",
 }
-_BT709, _BT601 = (1,), (4, 5, 6)  # AVColorSpace values
-_FULL_RANGE = 2  # AVCOL_RANGE_JPEG
+_BT709, _BT601 = (1,), (4, 5, 6)
+_FULL_RANGE = 2
 
 Frame = tuple[object, str, int, int, "bool | None", "str | None", float]
 
@@ -29,7 +27,6 @@ class Capture:
         options = {
             "video_size": f"{width}x{height}",
             "framerate": f"{fps:g}",
-            # start fast and never let ffmpeg hold frames back
             "fflags": "nobuffer",
             "probesize": "32",
             "analyzeduration": "0",
@@ -41,7 +38,6 @@ class Capture:
             options["input_format"] = fmt
         self.container = av.open(open_url(device), format=BACKEND, options=options)
         self.stream = self.container.streams.video[0]
-        # frame threading would hold back one frame per thread
         self.stream.codec_context.thread_type = "SLICE"
         self.dropped = 0
 
@@ -66,8 +62,6 @@ class Capture:
             got = time.perf_counter()
             if packet.size == 0:
                 continue
-            # An instant answer means frames piled up behind us. Every packet here is a
-            # keyframe, so skip ahead to the newest instead of showing a late one.
             if got - asked < 0.001 and backlog < 4:
                 backlog += 1
                 self.dropped += 1

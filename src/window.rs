@@ -44,7 +44,6 @@ pub fn spawn(shader_dir: PathBuf, params: Params) -> Result<Arc<Shared>, String>
 
 fn run(shader_dir: PathBuf, params: Params, ready: Ready) {
     let mut builder = EventLoop::<Wake>::with_user_event();
-    // Python owns the main thread, so the event loop has to live on this one.
     #[cfg(windows)]
     {
         use winit::platform::windows::EventLoopBuilderExtWindows;
@@ -162,7 +161,6 @@ impl Gfx {
         params: Params,
         proxy: EventLoopProxy<Wake>,
     ) -> Result<Self, String> {
-        // the picture window opens when capture starts (see `sync_windows`)
         let attributes = Window::default_attributes()
             .with_title("ps5scaler")
             .with_inner_size(PhysicalSize::new(1280, 720))
@@ -180,7 +178,6 @@ impl Gfx {
             .map_err(|e| format!("cannot create the settings window: {e}"))?,
         );
 
-        // "auto" leaves the choice to wgpu, or to the WGPU_BACKEND environment variable
         let mut instance_options = wgpu::InstanceDescriptor::new_with_display_handle_from_env(
             Box::new(el.owned_display_handle()),
         );
@@ -224,9 +221,6 @@ impl Gfx {
         let mut config = surface
             .get_default_config(&adapter, size.width.max(1), size.height.max(1))
             .ok_or("the GPU cannot present to this window")?;
-        // The pipeline writes display-encoded values; an sRGB target would encode them again.
-        // shortcut: if a platform offers only sRGB formats the picture will look washed out;
-        // add a non-sRGB view format then
         config.format = caps
             .formats
             .iter()
@@ -346,7 +340,6 @@ impl Gfx {
             return;
         }
         let (dst_w, dst_h) = (self.config.width as f64, self.config.height as f64);
-        // same fit as composite.wgsl
         let image_w = out_w as f64 * (dst_w / out_w as f64).min(dst_h / out_h as f64);
         let position = (self.cursor_x - (dst_w - image_w) / 2.0) / image_w;
         let mut params = lock(&self.shared.params);
@@ -360,7 +353,6 @@ impl Gfx {
     fn sync_windows(&mut self) {
         let (capture, panel, fullscreen) = {
             let mut p = lock(&self.shared.params);
-            // the settings window is the way to quit: never leave the app with no window
             if !p.capture {
                 p.panel = true;
             }
@@ -425,7 +417,6 @@ impl Gfx {
         );
         match action {
             Action::None => {}
-            // opening the device is Python's job; it sets `capture` once it has
             Action::Start => {
                 if let Some((name, _, _)) = sources.devices.get(sources.device) {
                     let (w, h) = sources.size;
@@ -440,7 +431,6 @@ impl Gfx {
                 sources.listed = false;
                 lock(&shared.events).push(Event::RefreshSources);
             }
-            // these need a file dialog or the config file, which Python owns
             Action::PickLut => lock(&shared.events).push(Event::PickLut),
             Action::Save => lock(&shared.events).push(Event::Save(params.to_toml())),
             Action::ClearLut => {
@@ -512,7 +502,6 @@ impl Gfx {
         self.ui_dirty = false;
         self.timing.begin_frame(device);
 
-        // newest frame: rebind if the textures behind it were recreated
         let (fmt, src_size, frames, src_range, src_matrix, decode_ms, pushed_at, capture_fps) = {
             let s = lock(&shared.source);
             if s.generation != self.source_generation {
@@ -572,7 +561,6 @@ impl Gfx {
         let frame = match self.surface.get_current_texture() {
             Current::Success(frame) | Current::Suboptimal(frame) => frame,
             Current::Outdated | Current::Lost => {
-                // retried at UI pace: a surface that stays outdated (minimised) must not spin
                 self.surface.configure(device, &self.config);
                 self.ui_dirty = true;
                 self.last_render = Instant::now();
@@ -584,7 +572,6 @@ impl Gfx {
         let mut encoder = device.create_command_encoder(&Default::default());
 
         let stats = lock(&shared.stats).clone();
-        // where the picture sits in the window: the same fit as composite.wgsl
         let fit_scale = (dst.0 as f32 / out.0 as f32).min(dst.1 as f32 / out.1 as f32);
         let (image_w, image_h) = (out.0 as f32 * fit_scale, out.1 as f32 * fit_scale);
         let image = [
@@ -610,20 +597,14 @@ impl Gfx {
         self.ui_dirty = animating || params != before;
         self.interactive = params.split || params.edit_zones;
 
-        // Frame generation. Between two content frames, `multiple - 1` generated
-        // pictures are shown and then the real one, evenly spaced over one content
-        // frame. The first goes out as soon as the newer frame arrives; the rest are
-        // drawn on the timer set up in `about_to_wait`.
         let new_frame = frames != self.converted_frame;
         self.converted_frame = frames;
-        // the game rate: what capture worked out from the repeats, else the rate frames arrive at
         let measured = if params.detected_fps > 0.0 {
             params.detected_fps
         } else {
             capture_fps
         };
         let (multiple, period) = frame_plan(params.content_fps, measured, params.target_fps);
-        // while the AI model makes the frames (ai.py) they arrive ready-made
         let generating = multiple > 1 && frames >= 2 && !params.ai_active;
         let mut phase = None;
         self.next_tick = None;
@@ -702,7 +683,6 @@ impl Gfx {
         stats.render_fps = self.render_fps;
         stats.capture_fps = capture_fps;
         stats.decode_ms = decode_ms;
-        // measured when the real frame goes out, so frame generation's wait is included
         if frames != self.shown_frame && phase.is_none() {
             self.shown_frame = frames;
             stats.present_ms = now.duration_since(pushed_at).as_secs_f32() * 1e3;
@@ -713,8 +693,6 @@ impl Gfx {
         } else {
             capture_fps
         };
-        // With frame generation the first two passes run on alternate draws. Keep the
-        // last reading of each, or their numbers blink in and out of the overlay.
         let held = (stats.pass_ms[0], stats.pass_ms[1]);
         stats.pass_ms = self.timing.ms;
         if generating {
@@ -729,7 +707,6 @@ impl Gfx {
         stats.frames = frames;
         self.rendered += 1;
         stats.rendered = self.rendered;
-        // steadiness: the rate of the slowest 1% of pictures over about the last 10 s
         if self.intervals.len() == INTERVALS {
             self.intervals.pop_front();
         }
@@ -796,20 +773,16 @@ impl ApplicationHandler<Wake> for App {
             return;
         }
         let (used_by_ui, repaint) = gfx.overlay.on_event(&gfx.window, &event);
-        // egui reports RedrawRequested itself as "needs a repaint"; obeying that would
-        // redraw in a loop as fast as the GPU allows
         if repaint && gfx.interactive && !matches!(event, WindowEvent::RedrawRequested) {
             gfx.ui_dirty = true;
         }
         match event {
-            // closing the picture only stops capture; `sync_windows` hides it
             WindowEvent::CloseRequested => {
                 lock(&gfx.shared.params).capture = false;
                 lock(&gfx.shared.events).push(Event::Stop);
             }
             WindowEvent::Resized(size) => gfx.resize(size),
             WindowEvent::RedrawRequested => gfx.render(),
-            // hotkeys are mapped in Python; this only reports which key went down
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
@@ -848,14 +821,12 @@ impl ApplicationHandler<Wake> for App {
     }
 
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
-        // wake up between frames too, so a saved shader is picked up while the source is idle
         let mut wake = Instant::now() + HOT_RELOAD_EVERY;
         if let Some(gfx) = self.gfx.as_mut() {
             gfx.sync_windows();
             gfx.hot_reload();
             let st = &mut gfx.settings;
             if st.shown {
-                // redrawn now and then anyway, for the live numbers and changes made elsewhere
                 let due = st.last_render + if st.dirty { UI_REDRAW_GAP } else { HOT_RELOAD_EVERY };
                 if Instant::now() >= due {
                     st.window.request_redraw();
@@ -871,7 +842,6 @@ impl ApplicationHandler<Wake> for App {
                     wake = due;
                 }
             }
-            // frame generation: the next in-between picture is due at a set time
             if let Some(tick) = gfx.next_tick {
                 if Instant::now() >= tick {
                     gfx.next_tick = None;

@@ -8,19 +8,16 @@ import tomllib
 from pathlib import Path
 
 DEFAULTS: dict = {
-    # audio_device: empty finds the sound input named after the capture device
     "capture": {"device": "", "width": 1920, "height": 1080, "fps": 60, "format": "auto", "audio_device": ""},
-    # backend: graphics API; DirectX 12 on Windows is what driver features such as
-    # NVIDIA Smooth Motion attach to
     "output": {
         "width": 0, "height": 0, "fullscreen": True, "vsync": "mailbox",
         "backend": "dx12" if sys.platform == "win32" else "auto",
     },
-    "params": {},  # anything Renderer.set_params accepts
-    "passes": {},  # name = true/false, see Renderer.toggle_pass
+    "params": {},
+    "passes": {},
     "audio": {"enabled": True, "volume": 1.0, "delay_ms": 0.0},
     "hotkeys": {
-        "Escape": "stop",  # close the picture window, back to the settings window
+        "Escape": "stop",
         "F1": "toggle:panel",
         "F2": "toggle:overlay",
         "F3": "toggle:split",
@@ -52,9 +49,6 @@ def save_sections(path: Path, text: str) -> None:
     """Replace the sections that `text` contains; every other section of the file is kept."""
     old = path.read_text(encoding="utf-8") if path.exists() else ""
     for name in re.findall(r"^\[(\w+)\]", text, re.M):
-        # a section runs from its header to the next line starting with "["
-        # shortcut: a hand-written multi-line array whose continuation line starts with "["
-        # would end the section early; none of the settings here are written that way
         old = re.sub(rf"^\[{name}\][^\n]*\n(?:(?!\[)[^\n]*\n?)*", "", old, flags=re.M)
     old = old.strip("\n")
     path.write_text(f"{old}\n\n{text}" if old else text, encoding="utf-8")

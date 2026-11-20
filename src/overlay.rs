@@ -110,8 +110,6 @@ impl Overlay {
         stats: &Stats,
         sources: Option<&mut Sources>,
     ) -> (Action, bool) {
-        // `image`: where the picture sits in the window (x, y, width, height in pixels).
-        // The zone frames are placed from it, so when it moves they are placed afresh.
         if image != self.zone_image {
             self.zone_image = image;
             self.zone_ids.clear();
@@ -162,7 +160,7 @@ impl Overlay {
             }
         }
         self.free = out.textures_delta.free.iter().copied().collect();
-        out.textures_delta.clear(); // egui asserts on drop that deltas were handled
+        out.textures_delta.clear();
         self.renderer
             .update_buffers(device, queue, encoder, &self.jobs, &self.screen);
         (action, animating)
@@ -214,8 +212,6 @@ fn zones_ui(ctx: &egui::Context, zones: &mut [Zone], ids: &[u64], picture: egui:
                 (now.max - picture.min) / picture.size(),
             );
             let moved = [min.x, min.y, max.x, max.y];
-            // going to screen points and back wobbles in the last digits; only a real
-            // drag should count as a change
             if moved
                 .iter()
                 .zip(zone.rect)
@@ -238,7 +234,7 @@ fn stats_ui(ctx: &egui::Context, s: &Stats, note: &str, hint: &str) {
                 .corner_radius(4.0)
                 .show(ui, |ui| {
                     ui.style_mut().override_text_style = Some(egui::TextStyle::Monospace);
-                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend); // one stat per line, never wrapped
+                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
                     ui.visuals_mut().override_text_color = Some(egui::Color32::from_gray(235));
                     if s.frames == 0 {
                         ui.label("waiting for frames...");
@@ -264,8 +260,6 @@ fn stats_ui(ctx: &egui::Context, s: &Stats, note: &str, hint: &str) {
                         s.decode_ms + s.present_ms
                     ));
                     if s.low_fps > 0.0 {
-                        // the slowest 1% of pictures over the last 10 s: close to the
-                        // render rate means even pacing, well below it means stutter
                         ui.label(format!("steadiness     1% low {:.1} fps", s.low_fps));
                     }
                     ui.label(format!(
@@ -385,7 +379,6 @@ fn source_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources) ->
     } else {
         s.source.as_str()
     });
-    // how the card's YUV is decoded; "auto" trusts what each frame reports
     ui.horizontal(|ui| {
         ui.label("Range");
         ui.selectable_value(&mut p.full_range, None, "auto");
@@ -451,7 +444,6 @@ fn panel_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources, tab
                         ui.selectable_value(&mut p.vsync, v, v.name());
                     }
                 });
-                // fixed once the window exists: Save, then restart, to switch
                 ui.horizontal(|ui| {
                     ui.label("Graphics API (next start)");
                     for b in Backend::ALL {
@@ -464,7 +456,6 @@ fn panel_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources, tab
                 ui.checkbox(&mut p.split, "Before / after split (drag the divider)");
             }
             Tab::FrameRate => {
-                // a 30 fps game arrives inside a 60 Hz signal with every frame repeated
                 ui.horizontal(|ui| {
                     ui.label("Current (game)");
                     ui.selectable_value(&mut p.content_fps, 0.0, "auto");
@@ -478,8 +469,6 @@ fn panel_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources, tab
                         ui.selectable_value(&mut p.target_fps, fps, format!("{fps:.0}"));
                     }
                 });
-                // off: the built-in method. The AI model needs its runtime installed;
-                // until then both switches are greyed out.
                 ui.add_enabled_ui(p.ai_available, |ui| {
                     ui.checkbox(&mut p.ai_framegen, "AI frames (RIFE)")
                         .on_hover_text("On: generated frames come from the RIFE model. Off: the built-in method.")
@@ -492,7 +481,6 @@ fn panel_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources, tab
                 ui.horizontal(|ui| {
                     ui.label("HUD zones");
                     let room = p.zones.len() < MAX_ZONES;
-                    // placed where a minimap usually is; drag them to fit
                     if ui.add_enabled(room, egui::Button::new("+ box")).clicked() {
                         p.zones.push(Zone {
                             rect: [0.02, 0.70, 0.20, 0.97],
@@ -519,7 +507,6 @@ fn panel_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources, tab
                 ui.label(if p.target_fps <= 0.0 {
                     "Frame generation is off.".to_string()
                 } else if s.multiple > 1 {
-                    // the real frame waits while the generated ones before it are shown
                     let wait = 1000.0 / s.content_fps.max(1.0) * (s.multiple - 1) as f32
                         / s.multiple as f32;
                     format!(
@@ -555,7 +542,6 @@ fn panel_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources, tab
                     slider(ui, &mut p.temperature, -1.0..=1.0, "temperature");
                     slider(ui, &mut p.tint, -1.0..=1.0, "tint");
                     slider(ui, &mut p.gamma, 0.5..=2.0, "gamma");
-                    // one slider drives all three channels; per-channel values come from config.toml
                     for (triple, range, text) in [
                         (&mut p.lift, -0.25..=0.25, "lift"),
                         (&mut p.lgg_gamma, 0.5..=2.0, "lgg gamma"),

@@ -5,14 +5,14 @@ def test_shortcut_entry_shows_a_start_up_failure_instead_of_losing_it(monkeypatc
     shown = []
     monkeypatch.setattr(picker, "show_error", shown.append)
     broken = tmp_path / "config.toml"
-    broken.write_text("[capture\n")  # not valid TOML
+    broken.write_text("[capture\n")
 
     assert app.gui(["--config", str(broken)]) == 1
     assert len(shown) == 1 and "could not start" in shown[0] and "TOMLDecodeError" in shown[0]
 
 
 def test_installed_program_keeps_its_config_in_the_user_profile(monkeypatch, tmp_path):
-    assert app.default_config_path() == app.Path("config.toml")  # from source: the current folder
+    assert app.default_config_path() == app.Path("config.toml")
     monkeypatch.setattr(app, "FROZEN", True)
     monkeypatch.setenv("APPDATA", str(tmp_path))
     assert app.default_config_path() == tmp_path / "PS5 Scaler" / "config.toml"

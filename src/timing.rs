@@ -125,7 +125,6 @@ impl Timing {
     pub fn resolve(&mut self, encoder: &mut wgpu::CommandEncoder) {
         let Some(gpu) = &self.gpu else { return };
         encoder.resolve_query_set(&gpu.set, 0..QUERIES, &gpu.resolve, 0);
-        // the readback buffer is busy while a map is pending; skip this frame's numbers then
         self.copied = self.in_flight.is_none();
         if self.copied {
             encoder.copy_buffer_to_buffer(&gpu.resolve, 0, &gpu.read, 0, BYTES);

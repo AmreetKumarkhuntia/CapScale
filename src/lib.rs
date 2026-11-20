@@ -207,7 +207,6 @@ impl Renderer {
                     "ai_active" => p.ai_active = value.extract()?,
                     "note" => p.note = value.extract()?,
                     "hud_zones" => {
-                        // each zone: [left, top, right, bottom] or with a fifth number, 1 for an ellipse
                         p.zones.clear();
                         for zone in value.extract::<Vec<Vec<f32>>>()? {
                             if zone.len() != 4 && zone.len() != 5 {
@@ -223,7 +222,6 @@ impl Renderer {
                     "lut_path" => {
                         let path = value.extract::<Option<String>>()?.unwrap_or_default();
                         if path != p.lut_path {
-                            // parsed here so a bad file raises in the caller, not on the render thread
                             new_lut = Some(if path.is_empty() {
                                 None
                             } else {
@@ -249,8 +247,6 @@ impl Renderer {
                         };
                     }
                     "backend" => {
-                        // stored for Save and shown in the panel; the window keeps the
-                        // API it was created with
                         let name: String = value.extract()?;
                         p.backend =
                             Backend::parse(&name).ok_or_else(|| bad("auto, dx12 or vulkan"))?;
@@ -268,8 +264,6 @@ impl Renderer {
                 }
                 Ok(())
             };
-            // a failed conversion only says "must be real number, not str"; say which setting,
-            // and keep the exception type the caller is catching
             set().map_err(|e| {
                 let py = kwargs.py();
                 let message = format!("{key}: {}", e.value(py));
@@ -447,7 +441,6 @@ impl Renderer {
         source.pushed_at = started;
         source.frames += 1;
         source.decode_ms = decode_ms;
-        // what the frame says, else the usual for raw capture: limited range, BT.709 for HD
         source.full_range = full_range.unwrap_or(false);
         source.matrix = matrix.unwrap_or(if size.1 >= 720 {
             Matrix::Bt709
