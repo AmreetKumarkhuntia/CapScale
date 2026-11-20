@@ -33,15 +33,8 @@ DEFAULTS: dict = {
 
 
 def app_dir(base: Path) -> Path:
-    """The app's folder under `base`. A folder left by the old name, PS5 Scaler, is
-    renamed to it, so saved settings and the AI install carry over."""
-    new, old = base / "CapScale", base / "PS5 Scaler"
-    if old.is_dir() and not new.exists():
-        try:
-            old.rename(new)
-        except OSError:
-            return old
-    return new
+    """The app's folder under `base`."""
+    return base / "CapScale"
 
 
 def load(path: Path) -> dict:
