@@ -1,4 +1,4 @@
-use ps5scaler::lut::*;
+use capscale::lut::*;
 
 const IDENTITY_2: &str =
     "# identity\nTITLE \"id\"\nLUT_3D_SIZE 2\nDOMAIN_MIN 0 0 0\nDOMAIN_MAX 1.0 1.0 1.0\n\n\

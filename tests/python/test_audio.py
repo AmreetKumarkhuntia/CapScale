@@ -1,6 +1,6 @@
 import numpy as np
 
-from ps5scaler.audio import DelayLine, match_input
+from capscale.audio import DelayLine, match_input
 
 
 def test_card_sound_input_is_found_by_the_video_device_name():

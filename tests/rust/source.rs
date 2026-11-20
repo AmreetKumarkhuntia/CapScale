@@ -1,4 +1,4 @@
-use ps5scaler::source::*;
+use capscale::source::*;
 
 #[test]
 fn packed_buffers_split_into_planes() {

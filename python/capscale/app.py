@@ -20,7 +20,7 @@ HINTS = {"toggle:panel": "settings", "toggle:split": "split", "stop": "close", "
 
 
 def _parse(argv: list[str] | None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(prog="ps5scaler", description="Real-time capture-card upscaler")
+    p = argparse.ArgumentParser(prog="capscale", description="Real-time capture-card upscaler")
     p.add_argument("--list-devices", action="store_true", help="print capture devices and their modes")
     p.add_argument("--config", help="path to config.toml (default: see README)")
     p.add_argument("--self-test", action="store_true", help=argparse.SUPPRESS)
@@ -46,7 +46,7 @@ def default_config_path() -> Path:
     if not FROZEN:
         return Path("config.toml")
     base = os.environ.get("APPDATA") or os.path.expanduser("~/.config")
-    return Path(base) / "PS5 Scaler" / "config.toml"
+    return Path(base) / "CapScale" / "config.toml"
 
 
 def _self_test(log: Path) -> int:
@@ -395,7 +395,7 @@ def gui(argv: list[str] | None = None) -> int:
     except Exception as e:
         from . import picker
 
-        picker.show_error(f"ps5scaler could not start.\n\n{type(e).__name__}: {e}")
+        picker.show_error(f"CapScale could not start.\n\n{type(e).__name__}: {e}")
         return 1
 
 

@@ -35,7 +35,7 @@ type Ready = Sender<Result<Arc<Shared>, String>>;
 pub fn spawn(shader_dir: PathBuf, params: Params) -> Result<Arc<Shared>, String> {
     let (tx, rx) = mpsc::channel();
     std::thread::Builder::new()
-        .name("ps5scaler-render".into())
+        .name("capscale-render".into())
         .spawn(move || run(shader_dir, params, tx))
         .map_err(|e| e.to_string())?;
     rx.recv()
@@ -162,7 +162,7 @@ impl Gfx {
         proxy: EventLoopProxy<Wake>,
     ) -> Result<Self, String> {
         let attributes = Window::default_attributes()
-            .with_title("ps5scaler")
+            .with_title("CapScale")
             .with_inner_size(PhysicalSize::new(1280, 720))
             .with_visible(false);
         let window = Arc::new(
@@ -172,7 +172,7 @@ impl Gfx {
         let settings_window = Arc::new(
             el.create_window(
                 Window::default_attributes()
-                    .with_title("PS5 Scaler")
+                    .with_title("CapScale")
                     .with_inner_size(LogicalSize::new(460, 760)),
             )
             .map_err(|e| format!("cannot create the settings window: {e}"))?,
@@ -206,7 +206,7 @@ impl Gfx {
         })?;
         let timestamps = adapter.features().contains(wgpu::Features::TIMESTAMP_QUERY);
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-            label: Some("ps5scaler"),
+            label: Some("capscale"),
             required_features: if timestamps {
                 wgpu::Features::TIMESTAMP_QUERY
             } else {

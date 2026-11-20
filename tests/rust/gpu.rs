@@ -4,11 +4,11 @@
 
 use std::path::Path;
 
-use ps5scaler::params::{FrameInfo, Globals, Matrix, Params, Zone};
-use ps5scaler::pipeline::{Pipeline, Step};
-use ps5scaler::shaders::ShaderDir;
-use ps5scaler::source::{Fmt, Plane, Source};
-use ps5scaler::timing::Timing;
+use capscale::params::{FrameInfo, Globals, Matrix, Params, Zone};
+use capscale::pipeline::{Pipeline, Step};
+use capscale::shaders::ShaderDir;
+use capscale::source::{Fmt, Plane, Source};
+use capscale::timing::Timing;
 
 const W: u32 = 640;
 const H: u32 = 360;
@@ -32,7 +32,7 @@ impl Gpu {
         let (device, queue) =
             pollster::block_on(adapter.request_device(&Default::default())).ok()?;
         let shaders =
-            ShaderDir::new(Path::new(env!("CARGO_MANIFEST_DIR")).join("python/ps5scaler/shaders"));
+            ShaderDir::new(Path::new(env!("CARGO_MANIFEST_DIR")).join("python/capscale/shaders"));
         let format = wgpu::TextureFormat::Rgba8Unorm;
         let mut pipeline = Pipeline::new(&device, format, &shaders).unwrap();
         pipeline.set_out_size(&device, (W, H));

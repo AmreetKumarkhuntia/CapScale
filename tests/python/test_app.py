@@ -1,4 +1,4 @@
-from ps5scaler import app, picker
+from capscale import app, picker
 
 
 def test_shortcut_entry_shows_a_start_up_failure_instead_of_losing_it(monkeypatch, tmp_path):
@@ -15,7 +15,7 @@ def test_installed_program_keeps_its_config_in_the_user_profile(monkeypatch, tmp
     assert app.default_config_path() == app.Path("config.toml")
     monkeypatch.setattr(app, "FROZEN", True)
     monkeypatch.setenv("APPDATA", str(tmp_path))
-    assert app.default_config_path() == tmp_path / "PS5 Scaler" / "config.toml"
+    assert app.default_config_path() == tmp_path / "CapScale" / "config.toml"
 
 
 def test_command_line_overrides_config(tmp_path):

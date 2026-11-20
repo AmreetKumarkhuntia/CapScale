@@ -2,7 +2,7 @@
 
 ## AMD FidelityFX Super Resolution 1.0
 
-`python/ps5scaler/shaders/easu.wgsl` and `python/ps5scaler/shaders/rcas.wgsl` are
+`python/capscale/shaders/easu.wgsl` and `python/capscale/shaders/rcas.wgsl` are
 WGSL ports of `FsrEasuF` / `FsrEasuCon` and `FsrRcasF` / `FsrRcasCon` from
 `ffx_fsr1.h`, with the approximation helpers they use from `ffx_a.h`
 (<https://github.com/GPUOpen-Effects/FidelityFX-FSR>). What was changed in the

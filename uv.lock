@@ -321,7 +321,7 @@ wheels = [
 ]
 
 [[package]]
-name = "ps5scaler"
+name = "capscale"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

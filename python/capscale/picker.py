@@ -22,7 +22,7 @@ def _root(title: str) -> tk.Tk:
 
 def pick_lut() -> str | None:
     """Ask for a .cube file. Returns its path, or None if cancelled."""
-    root = _root("ps5scaler")
+    root = _root("CapScale")
     root.withdraw()
     path = filedialog.askopenfilename(
         parent=root, title="Load 3D LUT", filetypes=[("Cube LUT", "*.cube"), ("All files", "*.*")]
@@ -32,7 +32,7 @@ def pick_lut() -> str | None:
 
 
 def show_error(message: str) -> None:
-    root = _root("ps5scaler")
+    root = _root("CapScale")
     root.withdraw()
-    messagebox.showerror("ps5scaler", message, parent=root)
+    messagebox.showerror("CapScale", message, parent=root)
     root.destroy()

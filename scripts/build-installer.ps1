@@ -1,4 +1,4 @@
-# Builds dist\PS5Scaler\PS5Scaler.exe and dist\PS5Scaler-Setup-<version>.exe.
+# Builds dist\CapScale\CapScale.exe and dist\CapScale-Setup-<version>.exe.
 #
 # Needs: Rust, uv, and Inno Setup 6 (https://jrsoftware.org/isinfo.php).
 # Works in a throwaway environment (.venv-build), so it neither needs nor disturbs
@@ -25,7 +25,7 @@ function Step($name, [scriptblock]$run) {
 }
 
 Step "wheel" { uv tool run maturin build --release --out dist\wheels }
-$wheel = Get-ChildItem dist\wheels\ps5scaler-$version-*.whl | Sort-Object LastWriteTime | Select-Object -Last 1
+$wheel = Get-ChildItem dist\wheels\capscale-$version-*.whl | Sort-Object LastWriteTime | Select-Object -Last 1
 
 # An existing environment is kept: an editor that has picked it up runs its python.exe,
 # and Windows will not let that file be replaced.
@@ -40,8 +40,8 @@ Step "install" { uv pip install --python .venv-build --reinstall $wheel.FullName
 # part of this build (scripts\install-ai.ps1 installs it apart), so PyInstaller cannot see that.
 Step "freeze" {
     & .venv-build\Scripts\pyinstaller.exe --noconfirm --clean --windowed `
-        --name PS5Scaler --icon "$repo\packaging\icon.ico" `
-        --add-data "$repo\python\ps5scaler\shaders;ps5scaler\shaders" `
+        --name CapScale --icon "$repo\packaging\icon.ico" `
+        --add-data "$repo\python\capscale\shaders;capscale\shaders" `
         --hidden-import socket --hidden-import selectors `
         --distpath dist --workpath build\pyinstaller --specpath build `
         "$repo\packaging\main.py"
@@ -49,16 +49,16 @@ Step "freeze" {
 
 # a module or data file left out only fails at run time, so run it once
 Step "self-test" {
-    $test = Start-Process dist\PS5Scaler\PS5Scaler.exe -ArgumentList "--self-test" -PassThru
+    $test = Start-Process dist\CapScale\CapScale.exe -ArgumentList "--self-test" -PassThru
     if (-not $test.WaitForExit(120000)) {
         $test.Kill()
         throw "self-test hung: a start-up error dialog is probably open, run the exe by hand to see it"
     }
     $global:LASTEXITCODE = $test.ExitCode
-    if ($test.ExitCode -ne 0) { Get-Content "$env:APPDATA\PS5 Scaler\self-test.log" -ErrorAction SilentlyContinue }
+    if ($test.ExitCode -ne 0) { Get-Content "$env:APPDATA\CapScale\self-test.log" -ErrorAction SilentlyContinue }
 }
 
 Step "installer" { & $iscc /Qp "/DAppVersion=$version" packaging\installer.iss }
 
-Get-ChildItem dist\PS5Scaler-Setup-$version.exe, dist\PS5Scaler\PS5Scaler.exe |
+Get-ChildItem dist\CapScale-Setup-$version.exe, dist\CapScale\CapScale.exe |
     ForEach-Object { "{0}  ({1:N0} MB)" -f $_.FullName, ($_.Length / 1MB) }

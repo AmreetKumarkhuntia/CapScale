@@ -5,7 +5,7 @@ import time
 import numpy as np
 import pytest
 
-from ps5scaler import ai
+from capscale import ai
 
 PERIOD = 0.04
 

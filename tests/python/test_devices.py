@@ -1,4 +1,4 @@
-from ps5scaler.devices import Mode, best_mode, parse_dshow_modes, parse_v4l2_modes
+from capscale.devices import Mode, best_mode, parse_dshow_modes, parse_v4l2_modes
 
 DSHOW = (
     'DirectShow video device options (from video devices)\n Pin "Capture" (alternative pin name "0")\n'

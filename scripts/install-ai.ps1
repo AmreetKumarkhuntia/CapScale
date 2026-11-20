@@ -1,13 +1,13 @@
 # Installs the optional AI frame generation: the open-source RIFE model (MIT) and
 # what runs it on an NVIDIA card (ONNX Runtime, CUDA, TensorRT).
 #
-# About 4 GB, in %LOCALAPPDATA%\PS5 Scaler\ai. The app, installed or run from
+# About 4 GB, in %LOCALAPPDATA%\CapScale\ai. The app, installed or run from
 # source, finds it there at its next start. To remove it, delete that folder.
 # Needs: uv, and an NVIDIA RTX card with a current driver.
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $PSScriptRoot
-$pack = Join-Path $env:LOCALAPPDATA "PS5 Scaler\ai"
-$work = Join-Path $env:TEMP "ps5scaler-ai"
+$pack = Join-Path $env:LOCALAPPDATA "CapScale\ai"
+$work = Join-Path $env:TEMP "capscale-ai"
 $model = "rife_v4.15_lite"
 New-Item -ItemType Directory -Force $pack, $work | Out-Null
 
@@ -45,7 +45,7 @@ Step "prepare the model" {
 # Loads it, times it and checks its output. The first load prepares the model for
 # this graphics card at 1080p, which takes a minute or two and is then kept.
 if (Test-Path "$repo\.venv\Scripts\python.exe") {
-    Step "check" { & "$repo\.venv\Scripts\python.exe" -m ps5scaler.ai 1920x1080 }
+    Step "check" { & "$repo\.venv\Scripts\python.exe" -m capscale.ai 1920x1080 }
 }
 Remove-Item -Recurse -Force $work
-"Installed in $pack. Restart PS5 Scaler and tick Frame rate > AI frames (RIFE) in the options."
+"Installed in $pack. Restart CapScale and tick AI frames (RIFE) on the settings window's Frame rate tab."

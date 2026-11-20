@@ -1,7 +1,7 @@
 use std::path::Path;
 
-use ps5scaler::pipeline::{Pipeline, FILES};
-use ps5scaler::shaders::ShaderDir;
+use capscale::pipeline::{Pipeline, FILES};
+use capscale::shaders::ShaderDir;
 
 fn noop_device() -> wgpu::Device {
     wgpu::Device::noop(&Default::default()).0
@@ -9,7 +9,7 @@ fn noop_device() -> wgpu::Device {
 
 #[test]
 fn every_shipped_shader_builds_against_the_pass_layout() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("python/ps5scaler/shaders");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("python/capscale/shaders");
     let built = Pipeline::new(
         &noop_device(),
         wgpu::TextureFormat::Bgra8Unorm,
@@ -20,8 +20,8 @@ fn every_shipped_shader_builds_against_the_pass_layout() {
 
 #[test]
 fn a_broken_shader_is_reported_instead_of_panicking() {
-    let shipped = Path::new(env!("CARGO_MANIFEST_DIR")).join("python/ps5scaler/shaders");
-    let dir = std::env::temp_dir().join(format!("ps5scaler-broken-{}", std::process::id()));
+    let shipped = Path::new(env!("CARGO_MANIFEST_DIR")).join("python/capscale/shaders");
+    let dir = std::env::temp_dir().join(format!("capscale-broken-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     for name in FILES.iter().chain(&["common"]) {
         std::fs::copy(

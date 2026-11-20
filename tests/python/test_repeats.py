@@ -2,8 +2,8 @@ import random
 
 import numpy as np
 
-from ps5scaler.pattern import Pattern
-from ps5scaler.repeats import Cadence, luma_of
+from capscale.pattern import Pattern
+from capscale.repeats import Cadence, luma_of
 
 
 def run(cadence: Cadence, changes, forced=None) -> list[bool]:

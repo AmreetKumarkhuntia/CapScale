@@ -9,7 +9,7 @@ A game frame comes in; the frames between it and the one before are generated an
 shown first, each in its time slot, then the frame itself. So a real frame is late by
 the time one generated frame takes, plus the slots before it.
 
-    python -m ps5scaler.ai [WIDTHxHEIGHT]     load the model, time it, check its output
+    python -m capscale.ai [WIDTHxHEIGHT]     load the model, time it, check its output
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from pathlib import Path
 
 import numpy as np
 
-PACK = Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "share") / "PS5 Scaler" / "ai"
+PACK = Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "share") / "CapScale" / "ai"
 SITE = PACK / "site"
 MODEL = PACK / "rife_yuv420.onnx"
 

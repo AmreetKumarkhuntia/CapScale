@@ -1,4 +1,4 @@
-# ps-scaler
+# CapScale
 
 Real-time upscaler for console gameplay coming in through a capture card.
 A capture frame goes in at 1080p60 and comes out at 1440p or 4K, upscaled with
@@ -6,7 +6,7 @@ FSR 1, sharpened and colour graded on the GPU, with a few milliseconds of added
 delay.
 
 - **Rust** (`src/`) owns the window and the GPU pipeline (wgpu, WGSL shaders).
-- **Python** (`python/ps5scaler/`) owns capture, hotkeys and config.
+- **Python** (`python/capscale/`) owns capture, hotkeys and config.
 
 ## Build
 
@@ -21,15 +21,15 @@ uv run maturin develop --release
 ## Run
 
 ```
-uv run ps5scaler                    # settings window; pick the card on the Source tab, then Start capture
-uv run ps5scaler --list-devices     # devices and the modes they offer
-uv run ps5scaler --windowed --device "Display capture-UVC03" --size 1920x1080 --fps 60
-uv run ps5scaler --test-pattern i420 --windowed    # colour bars, no card needed (also nv12, yuy2)
-uv run ps5scaler --test-pattern i420:30 --windowed # the same as a 30 fps picture in a 60 Hz signal
+uv run capscale                    # settings window; pick the card on the Source tab, then Start capture
+uv run capscale --list-devices     # devices and the modes they offer
+uv run capscale --windowed --device "Display capture-UVC03" --size 1920x1080 --fps 60
+uv run capscale --test-pattern i420 --windowed    # colour bars, no card needed (also nv12, yuy2)
+uv run capscale --test-pattern i420:30 --windowed # the same as a 30 fps picture in a 60 Hz signal
 ```
 
 To start it like any other program, run `scripts\install-shortcut.ps1` once. It puts
-a **PS5 Scaler** shortcut on the Desktop and in the Start menu: no console window,
+a **CapScale** shortcut on the Desktop and in the Start menu: no console window,
 opens at the settings window, and shows errors on screen.
 
 Close OBS (or anything else using the card) first: a capture device has one owner at a time.
@@ -111,7 +111,7 @@ scripts\install-ai.ps1
 ```
 
 which puts about 4 GB (NVIDIA's CUDA and TensorRT libraries, ONNX Runtime and the
-model) in `%LOCALAPPDATA%\PS5 Scaler\ai`. Delete that folder to remove it. Until it
+model) in `%LOCALAPPDATA%\CapScale\ai`. Delete that folder to remove it. Until it
 is installed the switch is greyed out.
 
 - On an RTX 5070 one generated 1080p frame takes 10 to 12 ms, so a real frame is
@@ -128,7 +128,7 @@ is installed the switch is greyed out.
   soft: put a HUD zone over them. The **AI: leave still areas untouched** switch
   turns this off, and the model then draws the whole frame.
 - It handles the 4:2:0 video a capture card normally gives (MJPEG, NV12).
-  `uv run python -m ps5scaler.ai` times it and checks its output.
+  `uv run python -m capscale.ai` times it and checks its output.
 
 In `config.toml` these are `ai_framegen` and `ai_still` under `[params]`.
 
@@ -172,7 +172,7 @@ tinted, switch **Matrix**. Then save.
 
 ## The pipeline
 
-Each pass is one file in `python/ps5scaler/shaders/`. Saving a shader recompiles
+Each pass is one file in `python/capscale/shaders/`. Saving a shader recompiles
 it while the app runs; if it does not compile, the previous version keeps running
 and the error shows in the stats overlay.
 
@@ -191,9 +191,9 @@ and the error shows in the stats overlay.
 ## Python API
 
 ```python
-import ps5scaler
+import capscale
 
-r = ps5scaler.Renderer(2560, 1440, fullscreen=True, vsync="mailbox")   # 0, 0 fits the window
+r = capscale.Renderer(2560, 1440, fullscreen=True, vsync="mailbox")   # 0, 0 fits the window
 r.push_frame(array, fmt="nv12", width=1920, height=1080)               # newest frame wins
 r.set_params(sharpness=0.4, exposure=0.0, saturation=1.1,
              lut_path="film.cube", lut_strength=0.6, upscaler="easu")
@@ -222,7 +222,7 @@ src/                  Rust: one module per job
   timing.rs           GPU timestamp queries
   overlay.rs          stats overlay, HUD zones and the settings window
   shared.rs           state shared between threads
-python/ps5scaler/     Python package
+python/capscale/     Python package
   app.py              command line and main loop
   devices.py          list devices and modes
   capture.py          open the card, yield frames
@@ -245,13 +245,13 @@ scripts\build-installer.ps1
 
 Needs [Inno Setup 6](https://jrsoftware.org/isinfo.php). It produces:
 
-- `dist\PS5Scaler\PS5Scaler.exe` — the app as a standalone program, no Python needed.
-- `dist\PS5Scaler-Setup-<version>.exe` — an installer for the current user (no
+- `dist\CapScale\CapScale.exe` — the app as a standalone program, no Python needed.
+- `dist\CapScale-Setup-<version>.exe` — an installer for the current user (no
   administrator prompt), with Start menu entry, optional desktop shortcut and uninstaller.
 
 The installed app keeps `config.toml` and the remembered capture source in
-`%APPDATA%\PS5 Scaler`. Having its own `.exe` also means graphics driver settings
-can target it: in the NVIDIA app, add `PS5Scaler.exe` under Graphics > Program
+`%APPDATA%\CapScale`. Having its own `.exe` also means graphics driver settings
+can target it: in the NVIDIA app, add `CapScale.exe` under Graphics > Program
 settings (for example to switch on Smooth Motion).
 
 Set the environment variable `WGPU_BACKEND` to `dx12` or `vulkan` to choose the

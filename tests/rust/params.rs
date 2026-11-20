@@ -1,4 +1,4 @@
-use ps5scaler::params::*;
+use capscale::params::*;
 
 fn decode(rows: [[f32; 4]; 3], yuv: [f32; 3]) -> [f32; 3] {
     rows.map(|r| r[0] * yuv[0] + r[1] * yuv[1] + r[2] * yuv[2] + r[3])

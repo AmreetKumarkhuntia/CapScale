@@ -1,11 +1,11 @@
 use std::fs;
 use std::time::SystemTime;
 
-use ps5scaler::shaders::ShaderDir;
+use capscale::shaders::ShaderDir;
 
 #[test]
 fn source_is_common_plus_pass_and_changes_are_noticed() {
-    let dir = std::env::temp_dir().join(format!("ps5scaler-shaders-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("capscale-shaders-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
     fs::write(dir.join("common.wgsl"), "// shared").unwrap();
     fs::write(dir.join("a.wgsl"), "// a").unwrap();

@@ -57,7 +57,7 @@ fn frame_plan(content_fps: f32, measured_fps: f32, target_fps: f32) -> (u32, f32
 }
 
 /// The window and GPU pipeline. Frames go in with `push_frame`; the newest one is drawn.
-#[pyclass(module = "ps5scaler")]
+#[pyclass(module = "capscale")]
 struct Renderer {
     shared: Arc<Shared>,
 }
@@ -88,7 +88,7 @@ impl Renderer {
         let shader_dir = match shader_dir {
             Some(dir) => dir,
             None => {
-                let package: PathBuf = py.import("ps5scaler")?.getattr("__file__")?.extract()?;
+                let package: PathBuf = py.import("capscale")?.getattr("__file__")?.extract()?;
                 package.with_file_name("shaders")
             }
         };

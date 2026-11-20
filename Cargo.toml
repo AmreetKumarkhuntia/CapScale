@@ -1,12 +1,12 @@
 [package]
-name = "ps5scaler"
+name = "capscale"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
 description = "Real-time capture-card upscaler: wgpu shader pipeline driven from Python"
 
 [lib]
-name = "ps5scaler"
+name = "capscale"
 # cdylib is the Python extension; rlib lets tests/rust link the same code
 crate-type = ["cdylib", "rlib"]
 

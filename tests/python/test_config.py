@@ -1,6 +1,6 @@
 import tomllib
 
-from ps5scaler import config
+from capscale import config
 
 FILE = """# my settings
 [capture]
