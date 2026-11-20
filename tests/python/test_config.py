@@ -31,6 +31,15 @@ def test_save_replaces_only_the_given_sections(tmp_path):
     assert tomllib.loads(path.read_text()) == data
 
 
+def test_folder_from_the_old_name_is_carried_over(tmp_path):
+    (tmp_path / "PS5 Scaler" / "ai").mkdir(parents=True)
+    assert config.app_dir(tmp_path) == tmp_path / "CapScale"
+    assert (tmp_path / "CapScale" / "ai").is_dir() and not (tmp_path / "PS5 Scaler").exists()
+    (tmp_path / "PS5 Scaler").mkdir()
+    assert config.app_dir(tmp_path) == tmp_path / "CapScale"
+    assert (tmp_path / "PS5 Scaler").is_dir()
+
+
 def test_save_creates_a_missing_file_and_load_merges_defaults(tmp_path):
     path = tmp_path / "config.toml"
     config.save_sections(path, SAVED)

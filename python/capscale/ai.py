@@ -23,7 +23,9 @@ from pathlib import Path
 
 import numpy as np
 
-PACK = Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "share") / "CapScale" / "ai"
+from .config import app_dir
+
+PACK = app_dir(Path(os.environ.get("LOCALAPPDATA") or Path.home() / ".local" / "share")) / "ai"
 SITE = PACK / "site"
 MODEL = PACK / "rife_yuv420.onnx"
 

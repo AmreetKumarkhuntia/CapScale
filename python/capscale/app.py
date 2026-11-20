@@ -46,7 +46,7 @@ def default_config_path() -> Path:
     if not FROZEN:
         return Path("config.toml")
     base = os.environ.get("APPDATA") or os.path.expanduser("~/.config")
-    return Path(base) / "CapScale" / "config.toml"
+    return config.app_dir(Path(base)) / "config.toml"
 
 
 def _self_test(log: Path) -> int:
