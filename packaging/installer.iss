@@ -27,6 +27,8 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ; the app holds its files open while it runs
 CloseApplications=yes
+; shown on the page after the files are installed
+InfoAfterFile=getting-started.txt
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"

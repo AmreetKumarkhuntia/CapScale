@@ -31,6 +31,7 @@ const FPS_CHOICES: [u32; 5] = [120, 60, 50, 30, 25];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tab {
+    Guide,
     Source,
     Output,
     FrameRate,
@@ -53,6 +54,8 @@ pub struct Overlay {
     zone_image: [f32; 4],
     /// Settings window: the tab showing.
     tab: Tab,
+    /// The first device list has been seen, and with it whether to open on the guide.
+    tab_chosen: bool,
 }
 
 impl Overlay {
@@ -80,6 +83,7 @@ impl Overlay {
             next_zone_id: 0,
             zone_image: [0.0; 4],
             tab: Tab::Source,
+            tab_chosen: false,
         }
     }
 
@@ -123,6 +127,14 @@ impl Overlay {
 
         let input = self.state.take_egui_input(window);
         let mut action = Action::None;
+        if let Some(src) = &sources {
+            if src.listed && !self.tab_chosen {
+                self.tab_chosen = true;
+                if !src.remembered {
+                    self.tab = Tab::Guide;
+                }
+            }
+        }
         let tab = &mut self.tab;
         let mut out = if let Some(sources) = sources {
             self.ctx.run_ui(input, |ui| {
@@ -394,6 +406,47 @@ fn source_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources) ->
     action
 }
 
+/// The Getting started tab: what the app does and the steps to a first picture.
+fn guide_ui(ui: &mut egui::Ui, tab: &mut Tab) {
+    ui.heading("Welcome to CapScale");
+    ui.label(
+        "CapScale shows your console through a capture card, upscaled to your monitor \
+         and optionally smoothed to a higher frame rate. Everything runs on your graphics card.",
+    );
+    ui.add_space(8.0);
+    ui.strong("Getting a picture");
+    for step in [
+        "1. Connect the console's HDMI to the capture card, and the card to this PC by USB.",
+        "2. Close OBS, Discord streaming, or anything else using the card.",
+        "3. On the Source tab pick the card, 1920 x 1080 and 60, then press Start capture.",
+        "4. The picture opens in its own window. F11 toggles fullscreen, Escape stops.",
+    ] {
+        ui.label(step);
+    }
+    ui.add_space(8.0);
+    ui.strong("Making it look better");
+    for (name, what) in [
+        ("Picture", "the upscaler, sharpening, colour grading and a .cube LUT."),
+        ("Frame rate", "generates in-between frames, for example a 30 fps game to 60. Built in, or AI (RIFE) on an NVIDIA RTX card."),
+        ("Output", "window size, vsync and the stats overlay."),
+        ("Audio", "plays the game's sound; move the delay slider if sound comes before the picture."),
+    ] {
+        ui.horizontal_wrapped(|ui| {
+            ui.strong(name);
+            ui.label(what);
+        });
+    }
+    ui.add_space(8.0);
+    ui.strong("Keys (on the picture window)");
+    ui.label("F1 settings · F2 stats · F3 before/after split · F4 next upscaler · F11 fullscreen · Escape stop");
+    ui.add_space(8.0);
+    ui.label("Changes apply at once. Press Save to config.toml to keep them for next time.");
+    ui.add_space(8.0);
+    if ui.button("Go to Source").clicked() {
+        *tab = Tab::Source;
+    }
+}
+
 /// The whole settings window: a row of tabs, the tab's settings, Save at the bottom.
 fn panel_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources, tab: &mut Tab) -> Action {
     let mut action = Action::None;
@@ -410,6 +463,7 @@ fn panel_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources, tab
     egui::CentralPanel::default().show(ui, |ui| {
         ui.horizontal(|ui| {
             for (t, name) in [
+                (Tab::Guide, "Getting started"),
                 (Tab::Source, "Source"),
                 (Tab::Output, "Output"),
                 (Tab::FrameRate, "Frame rate"),
@@ -421,6 +475,7 @@ fn panel_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources, tab
         });
         ui.separator();
         egui::ScrollArea::vertical().show(ui, |ui| match *tab {
+            Tab::Guide => guide_ui(ui, tab),
             Tab::Source => action = source_ui(ui, p, s, src),
             Tab::Output => {
                 let current = OUTPUT_SIZES

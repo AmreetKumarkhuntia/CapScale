@@ -359,6 +359,7 @@ impl Renderer {
     ) {
         let mut s = lock(&self.shared.sources);
         s.device = devices.iter().position(|d| d.0 == device).unwrap_or(0);
+        s.remembered = !device.is_empty();
         s.devices = devices;
         (s.size, s.fps, s.listed) = ((width, height), fps, true);
         drop(s);

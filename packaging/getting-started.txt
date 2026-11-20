@@ -1,0 +1,31 @@
+Getting started with CapScale
+
+CapScale shows your console through a capture card, upscaled to your monitor and
+optionally smoothed to a higher frame rate. Everything runs on your graphics card.
+
+Getting a picture
+  1. Connect the console's HDMI to the capture card, and the card to this PC by USB.
+  2. Close OBS, Discord streaming, or anything else using the card.
+  3. Start CapScale. On the Source tab pick the card, 1920 x 1080 and 60,
+     then press Start capture.
+  4. The picture opens in its own window. F11 toggles fullscreen, Escape stops.
+
+Making it look better (tabs in the settings window)
+  Picture     the upscaler, sharpening, colour grading and a .cube LUT.
+  Frame rate  in-between frames, for example a 30 fps game shown at 60.
+  Output      window size, vsync and the stats overlay.
+  Audio       the game's sound; raise the delay if sound comes before the picture.
+
+Keys (on the picture window)
+  F1 settings   F2 stats   F3 before/after split   F4 next upscaler
+  F11 fullscreen   Escape stop
+
+Changes apply at once. Press "Save to config.toml" to keep them for next time.
+Settings live in %APPDATA%\CapScale.
+
+AI frame generation (optional, NVIDIA RTX only)
+  If you ticked it during setup, it is ready: tick "AI frames (RIFE)" on the
+  Frame rate tab. To add it later, run "CapScale AI setup" from the Start menu
+  (about 4 GB download), then restart CapScale.
+
+The same guide is on the "Getting started" tab inside the app.

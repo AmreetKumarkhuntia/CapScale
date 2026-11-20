@@ -8,6 +8,41 @@ delay.
 - **Rust** (`src/`) owns the window and the GPU pipeline (wgpu, WGSL shaders).
 - **Python** (`python/capscale/`) owns capture, hotkeys and config.
 
+## Install
+
+Download `CapScale-Setup-<version>.exe` from the
+[Releases](https://github.com/AmreetKumarkhuntia/CapScale/releases) page and run it.
+It installs for your user only (no administrator rights) and adds CapScale to the
+Start menu, plus the Desktop if you tick it.
+
+On the options page:
+
+- **Create a desktop shortcut**
+- **Download AI frame generation** (about 4 GB, NVIDIA RTX only, off by default).
+  A window shows the download; press Enter when it says it is done. You can add it
+  later with **CapScale AI setup** in the Start menu.
+
+The last page of the installer shows the getting-started guide below. To remove
+CapScale, use Windows' Installed apps; that also removes the AI download. Your
+settings stay in `%APPDATA%\CapScale`.
+
+## Getting started
+
+The first time CapScale opens, the settings window shows a **Getting started** tab
+with these steps. It is always there as the first tab.
+
+1. Connect the console's HDMI to the capture card, and the card to the PC by USB.
+2. Close OBS, Discord streaming, or anything else using the card. A capture device
+   has one owner at a time.
+3. On the **Source** tab pick the card, 1920 x 1080 and 60, then press **Start capture**.
+4. The picture opens in its own window. F11 toggles fullscreen, Escape stops.
+
+Then tune it on the other tabs: **Picture** (upscaler, sharpening, colour, LUT),
+**Frame rate** (in-between frames, e.g. a 30 fps game shown at 60), **Output**
+(window size, vsync, stats overlay) and **Audio**. Changes apply at once; press
+**Save to config.toml** to keep them. See [Keys](#keys) and [Settings](#settings)
+for the details.
+
 ## Build
 
 Needs Rust, Python 3.11+ and [uv](https://docs.astral.sh/uv/).
@@ -61,7 +96,7 @@ Keys are set in the `[hotkeys]` section of `config.toml`.
 
 Three ways to change the same values:
 
-1. **Settings window** (opens with the app, F1): tabs for source, output size, frame rate,
+1. **Settings window** (opens with the app, F1): tabs for getting started, source, output size, frame rate,
    upscaler / sharpening / colour / LUT, and audio. It stays open beside the picture, so
    changes show live.
    "Save to config.toml" writes them to the file.

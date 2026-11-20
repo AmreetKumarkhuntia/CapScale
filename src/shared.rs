@@ -52,6 +52,8 @@ pub type Device = (String, String, Vec<(u32, u32, f32)>);
 pub struct Sources {
     /// false until Python has listed the devices once
     pub listed: bool,
+    /// a device was saved from an earlier run, so the user has been through setup before
+    pub remembered: bool,
     pub devices: Vec<Device>,
     pub device: usize,
     pub size: (u32, u32),
