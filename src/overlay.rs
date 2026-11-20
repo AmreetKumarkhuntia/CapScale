@@ -1,16 +1,19 @@
-//! In-window UI drawn with egui: the stats overlay and the options panel.
+//! UI drawn with egui: the stats overlay and HUD zones on the picture, and the
+//! settings window.
 
 use egui_wgpu::ScreenDescriptor;
 use winit::window::Window;
 
 use crate::params::{Backend, Matrix, Params, Upscaler, Vsync, Zone, MAX_ZONES};
-use crate::shared::{Stats, PASS_NAMES};
+use crate::shared::{Sources, Stats, PASS_NAMES};
 
-/// Something the options panel asked for that the panel cannot do itself.
+/// Something the settings window asked for that it cannot do itself.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Action {
     None,
-    PickSource,
+    Start,
+    Stop,
+    Refresh,
     PickLut,
     ClearLut,
     Save,
@@ -22,6 +25,18 @@ const OUTPUT_SIZES: [(&str, (u32, u32)); 4] = [
     ("2560 x 1440", (2560, 1440)),
     ("3840 x 2160", (3840, 2160)),
 ];
+
+/// Capture rates offered on the Source tab, as far as the mode allows.
+const FPS_CHOICES: [u32; 5] = [120, 60, 50, 30, 25];
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Tab {
+    Source,
+    Output,
+    FrameRate,
+    Picture,
+    Audio,
+}
 
 pub struct Overlay {
     ctx: egui::Context,
@@ -36,6 +51,8 @@ pub struct Overlay {
     next_zone_id: u64,
     /// Where the picture sat in the window when those frames were placed.
     zone_image: [f32; 4],
+    /// Settings window: the tab showing.
+    tab: Tab,
 }
 
 impl Overlay {
@@ -62,6 +79,7 @@ impl Overlay {
             zone_ids: Vec::new(),
             next_zone_id: 0,
             zone_image: [0.0; 4],
+            tab: Tab::Source,
         }
     }
 
@@ -75,9 +93,10 @@ impl Overlay {
         self.ctx.egui_wants_keyboard_input()
     }
 
-    /// Build this frame's UI and upload its geometry. The panel edits `params` in
-    /// place. Returns what the panel asked for, and whether the UI is mid-animation
-    /// and wants another frame straight away.
+    /// Build this frame's UI and upload its geometry. With `sources` it is the settings
+    /// window, else the picture window's stats and zones. Both edit `params` in place.
+    /// Returns what the settings asked for, and whether the UI is mid-animation and
+    /// wants another frame straight away.
     #[allow(clippy::too_many_arguments)]
     pub fn prepare(
         &mut self,
@@ -89,6 +108,7 @@ impl Overlay {
         image: [f32; 4],
         params: &mut Params,
         stats: &Stats,
+        sources: Option<&mut Sources>,
     ) -> (Action, bool) {
         // `image`: where the picture sits in the window (x, y, width, height in pixels).
         // The zone frames are placed from it, so when it moves they are placed afresh.
@@ -105,12 +125,16 @@ impl Overlay {
 
         let input = self.state.take_egui_input(window);
         let mut action = Action::None;
-        let mut out = self.ctx.run_pass(input, |ctx| {
-            if params.overlay {
-                stats_ui(ctx, stats, &params.note, &params.hint);
-            }
-            if params.panel {
-                action = panel_ui(ctx, params, stats);
+        let tab = &mut self.tab;
+        let mut out = if let Some(sources) = sources {
+            self.ctx.run_ui(input, |ui| {
+                action = panel_ui(ui, params, stats, sources, tab);
+            })
+        } else {
+            self.ctx.run_pass(input, |ctx| {
+                if params.overlay {
+                    stats_ui(ctx, stats, &params.note, &params.hint);
+                }
                 if params.edit_zones {
                     let scale = 1.0 / ctx.pixels_per_point();
                     let picture = egui::Rect::from_min_size(
@@ -119,8 +143,8 @@ impl Overlay {
                     );
                     zones_ui(ctx, &mut params.zones, zone_ids, picture);
                 }
-            }
-        });
+            })
+        };
         self.state
             .handle_platform_output(window, out.platform_output);
         let animating = out
@@ -286,41 +310,126 @@ fn slider(ui: &mut egui::Ui, value: &mut f32, range: std::ops::RangeInclusive<f3
     ui.add(egui::Slider::new(value, range).text(text));
 }
 
-fn panel_ui(ctx: &egui::Context, p: &mut Params, s: &Stats) -> Action {
+/// The Source tab: which capture card and mode, and starting or stopping capture.
+fn source_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources) -> Action {
     let mut action = Action::None;
-    egui::Window::new("Options")
-        // on the right: the left side is where the stats box and most minimaps are,
-        // and the HUD zones have to be dragged onto the minimap
-        .default_pos([ctx.content_rect().right() - 380.0, 40.0])
-        .default_width(340.0)
-        .default_height(900.0) // tall enough to show every section; egui keeps it on screen
-        .vscroll(true)
-        .show(ctx, |ui| {
-            section(ui, "Source", true, |ui| {
-                ui.label(if s.frames == 0 {
-                    "no frames yet"
-                } else {
-                    s.source.as_str()
-                });
-                if ui.button("Change source...").clicked() {
-                    action = Action::PickSource;
+    if !src.listed {
+        ui.label("Looking for capture devices...");
+    } else if src.devices.is_empty() {
+        ui.label("No capture devices found. Close OBS or anything else using the card, then Refresh.");
+    } else {
+        src.device = src.device.min(src.devices.len() - 1);
+        egui::ComboBox::from_label("Device")
+            .selected_text(src.devices[src.device].1.as_str())
+            .show_ui(ui, |ui| {
+                for (i, (_, label, _)) in src.devices.iter().enumerate() {
+                    ui.selectable_value(&mut src.device, i, label.as_str());
                 }
-                // how the card's YUV is decoded; "auto" trusts what each frame reports
-                ui.horizontal(|ui| {
-                    ui.label("Range");
-                    ui.selectable_value(&mut p.full_range, None, "auto");
-                    ui.selectable_value(&mut p.full_range, Some(false), "limited");
-                    ui.selectable_value(&mut p.full_range, Some(true), "full");
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Matrix");
-                    ui.selectable_value(&mut p.matrix, None, "auto");
-                    ui.selectable_value(&mut p.matrix, Some(Matrix::Bt601), "bt601");
-                    ui.selectable_value(&mut p.matrix, Some(Matrix::Bt709), "bt709");
-                });
             });
+        let modes = &src.devices[src.device].2;
+        let mut sizes: Vec<(u32, u32)> = Vec::new();
+        for &(w, h, _) in modes {
+            if !sizes.contains(&(w, h)) {
+                sizes.push((w, h));
+            }
+        }
+        if !sizes.contains(&src.size) {
+            src.size = sizes.first().copied().unwrap_or_default();
+        }
+        egui::ComboBox::from_label("Resolution")
+            .selected_text(format!("{} x {}", src.size.0, src.size.1))
+            .show_ui(ui, |ui| {
+                for size in sizes {
+                    ui.selectable_value(&mut src.size, size, format!("{} x {}", size.0, size.1));
+                }
+            });
+        let top = modes
+            .iter()
+            .filter(|m| (m.0, m.1) == src.size)
+            .fold(0.0, |top: f32, m| top.max(m.2));
+        let rates: Vec<u32> = FPS_CHOICES
+            .into_iter()
+            .filter(|&f| f as f32 <= top + 0.5)
+            .collect();
+        if !rates.contains(&src.fps) {
+            src.fps = rates.first().copied().unwrap_or_default();
+        }
+        egui::ComboBox::from_label("Frame rate")
+            .selected_text(src.fps.to_string())
+            .show_ui(ui, |ui| {
+                for &fps in &rates {
+                    ui.selectable_value(&mut src.fps, fps, fps.to_string());
+                }
+            });
+        if modes.is_empty() {
+            ui.label("This device offers no MJPEG, NV12 or YUY2 mode.");
+        }
+        ui.horizontal(|ui| {
+            let start = if p.capture { "Restart capture" } else { "Start capture" };
+            if ui.add_enabled(!rates.is_empty(), egui::Button::new(start)).clicked() {
+                action = Action::Start;
+            }
+            if ui.add_enabled(p.capture, egui::Button::new("Stop")).clicked() {
+                action = Action::Stop;
+            }
+        });
+    }
+    if ui.button("Refresh devices").clicked() {
+        action = Action::Refresh;
+    }
+    ui.separator();
+    ui.label(if !p.capture {
+        "not capturing"
+    } else if s.frames == 0 {
+        "no frames yet"
+    } else {
+        s.source.as_str()
+    });
+    // how the card's YUV is decoded; "auto" trusts what each frame reports
+    ui.horizontal(|ui| {
+        ui.label("Range");
+        ui.selectable_value(&mut p.full_range, None, "auto");
+        ui.selectable_value(&mut p.full_range, Some(false), "limited");
+        ui.selectable_value(&mut p.full_range, Some(true), "full");
+    });
+    ui.horizontal(|ui| {
+        ui.label("Matrix");
+        ui.selectable_value(&mut p.matrix, None, "auto");
+        ui.selectable_value(&mut p.matrix, Some(Matrix::Bt601), "bt601");
+        ui.selectable_value(&mut p.matrix, Some(Matrix::Bt709), "bt709");
+    });
+    action
+}
 
-            section(ui, "Output", true, |ui| {
+/// The whole settings window: a row of tabs, the tab's settings, Save at the bottom.
+fn panel_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources, tab: &mut Tab) -> Action {
+    let mut action = Action::None;
+    egui::Panel::bottom("save").show(ui, |ui| {
+        ui.horizontal(|ui| {
+            if ui.button("Save to config.toml").clicked() {
+                action = Action::Save;
+            }
+            if ui.button("Reset look").clicked() {
+                p.reset_look();
+            }
+        });
+    });
+    egui::CentralPanel::default().show(ui, |ui| {
+        ui.horizontal(|ui| {
+            for (t, name) in [
+                (Tab::Source, "Source"),
+                (Tab::Output, "Output"),
+                (Tab::FrameRate, "Frame rate"),
+                (Tab::Picture, "Picture"),
+                (Tab::Audio, "Audio"),
+            ] {
+                ui.selectable_value(tab, t, name);
+            }
+        });
+        ui.separator();
+        egui::ScrollArea::vertical().show(ui, |ui| match *tab {
+            Tab::Source => action = source_ui(ui, p, s, src),
+            Tab::Output => {
                 let current = OUTPUT_SIZES
                     .iter()
                     .find(|(_, size)| *size == p.out_size)
@@ -350,9 +459,11 @@ fn panel_ui(ctx: &egui::Context, p: &mut Params, s: &Stats) -> Action {
                     }
                 });
                 ui.label(format!("now: {}", s.adapter));
-            });
-
-            section(ui, "Frame rate", true, |ui| {
+                ui.separator();
+                ui.checkbox(&mut p.overlay, "Stats overlay on the picture");
+                ui.checkbox(&mut p.split, "Before / after split (drag the divider)");
+            }
+            Tab::FrameRate => {
                 // a 30 fps game arrives inside a 60 Hz signal with every frame repeated
                 ui.horizontal(|ui| {
                     ui.label("Current (game)");
@@ -423,61 +534,59 @@ fn panel_ui(ctx: &egui::Context, p: &mut Params, s: &Stats) -> Action {
                         s.capture_fps
                     )
                 });
-            });
-
-            section(ui, "Upscale and sharpen", true, |ui| {
-                ui.horizontal(|ui| {
-                    ui.checkbox(&mut p.upscale, "Upscaler");
-                    for u in Upscaler::ALL {
-                        ui.selectable_value(&mut p.upscaler, u, u.label());
+            }
+            Tab::Picture => {
+                section(ui, "Upscale and sharpen", true, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut p.upscale, "Upscaler");
+                        for u in Upscaler::ALL {
+                            ui.selectable_value(&mut p.upscaler, u, u.label());
+                        }
+                    });
+                    ui.checkbox(&mut p.rcas, "AMD FSR 1 sharpening (RCAS)");
+                    slider(ui, &mut p.sharpness, 0.0..=2.0, "sharpness (0 = sharpest)");
+                });
+                section(ui, "Colour", true, |ui| {
+                    ui.checkbox(&mut p.grade, "Colour grading");
+                    slider(ui, &mut p.exposure, -3.0..=3.0, "exposure (stops)");
+                    slider(ui, &mut p.contrast, 0.5..=2.0, "contrast");
+                    slider(ui, &mut p.saturation, 0.0..=2.0, "saturation");
+                    slider(ui, &mut p.vibrance, -1.0..=1.0, "vibrance");
+                    slider(ui, &mut p.temperature, -1.0..=1.0, "temperature");
+                    slider(ui, &mut p.tint, -1.0..=1.0, "tint");
+                    slider(ui, &mut p.gamma, 0.5..=2.0, "gamma");
+                    // one slider drives all three channels; per-channel values come from config.toml
+                    for (triple, range, text) in [
+                        (&mut p.lift, -0.25..=0.25, "lift"),
+                        (&mut p.lgg_gamma, 0.5..=2.0, "lgg gamma"),
+                        (&mut p.gain, 0.5..=2.0, "gain"),
+                    ] {
+                        let mut v = triple[0];
+                        slider(ui, &mut v, range, text);
+                        if v != triple[0] {
+                            *triple = [v; 3];
+                        }
                     }
                 });
-                ui.checkbox(&mut p.rcas, "AMD FSR 1 sharpening (RCAS)");
-                slider(ui, &mut p.sharpness, 0.0..=2.0, "sharpness (0 = sharpest)");
-            });
-
-            section(ui, "Colour", true, |ui| {
-                ui.checkbox(&mut p.grade, "Colour grading");
-                slider(ui, &mut p.exposure, -3.0..=3.0, "exposure (stops)");
-                slider(ui, &mut p.contrast, 0.5..=2.0, "contrast");
-                slider(ui, &mut p.saturation, 0.0..=2.0, "saturation");
-                slider(ui, &mut p.vibrance, -1.0..=1.0, "vibrance");
-                slider(ui, &mut p.temperature, -1.0..=1.0, "temperature");
-                slider(ui, &mut p.tint, -1.0..=1.0, "tint");
-                slider(ui, &mut p.gamma, 0.5..=2.0, "gamma");
-                // one slider drives all three channels; per-channel values come from config.toml
-                for (triple, range, text) in [
-                    (&mut p.lift, -0.25..=0.25, "lift"),
-                    (&mut p.lgg_gamma, 0.5..=2.0, "lgg gamma"),
-                    (&mut p.gain, 0.5..=2.0, "gain"),
-                ] {
-                    let mut v = triple[0];
-                    slider(ui, &mut v, range, text);
-                    if v != triple[0] {
-                        *triple = [v; 3];
-                    }
-                }
-            });
-
-            section(ui, "LUT", true, |ui| {
-                ui.checkbox(&mut p.lut, "Apply 3D LUT");
-                ui.label(if p.lut_path.is_empty() {
-                    "none loaded"
-                } else {
-                    p.lut_path.as_str()
+                section(ui, "LUT", true, |ui| {
+                    ui.checkbox(&mut p.lut, "Apply 3D LUT");
+                    ui.label(if p.lut_path.is_empty() {
+                        "none loaded"
+                    } else {
+                        p.lut_path.as_str()
+                    });
+                    ui.horizontal(|ui| {
+                        if ui.button("Load .cube...").clicked() {
+                            action = Action::PickLut;
+                        }
+                        if !p.lut_path.is_empty() && ui.button("Clear").clicked() {
+                            action = Action::ClearLut;
+                        }
+                    });
+                    slider(ui, &mut p.lut_strength, 0.0..=1.0, "strength");
                 });
-                ui.horizontal(|ui| {
-                    if ui.button("Load .cube...").clicked() {
-                        action = Action::PickLut;
-                    }
-                    if !p.lut_path.is_empty() && ui.button("Clear").clicked() {
-                        action = Action::ClearLut;
-                    }
-                });
-                slider(ui, &mut p.lut_strength, 0.0..=1.0, "strength");
-            });
-
-            section(ui, "Audio", true, |ui| {
+            }
+            Tab::Audio => {
                 ui.checkbox(&mut p.audio, "Game audio");
                 slider(ui, &mut p.volume, 0.0..=1.5, "volume");
                 slider(
@@ -486,23 +595,8 @@ fn panel_ui(ctx: &egui::Context, p: &mut Params, s: &Stats) -> Action {
                     0.0..=300.0,
                     "delay ms (if sound leads picture)",
                 );
-            });
-
-            section(ui, "Debug", false, |ui| {
-                ui.checkbox(&mut p.overlay, "Stats overlay");
-                ui.checkbox(&mut p.split, "Before / after split (drag the divider)");
-                ui.label(format!("GPU: {}", s.adapter));
-            });
-
-            ui.separator();
-            ui.horizontal(|ui| {
-                if ui.button("Save to config.toml").clicked() {
-                    action = Action::Save;
-                }
-                if ui.button("Reset look").clicked() {
-                    p.reset_look();
-                }
-            });
+            }
         });
+    });
     action
 }

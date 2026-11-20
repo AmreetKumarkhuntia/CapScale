@@ -1,4 +1,4 @@
-"""Command line entry point: capture -> Renderer, plus hotkeys, popups and live config."""
+"""Command line entry point: capture -> Renderer, plus hotkeys, the settings window's requests and live config."""
 from __future__ import annotations
 
 import argparse
@@ -18,7 +18,7 @@ from .repeats import Cadence, luma_of
 FROZEN = getattr(sys, "frozen", False)
 
 # what the overlay's hint line calls each action
-HINTS = {"toggle:panel": "options", "pick_source": "source", "toggle:split": "split", "quit": "quit"}
+HINTS = {"toggle:panel": "settings", "toggle:split": "split", "stop": "close", "quit": "quit"}
 
 
 def _parse(argv: list[str] | None) -> argparse.Namespace:
@@ -26,8 +26,9 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--list-devices", action="store_true", help="print capture devices and their modes")
     p.add_argument("--config", help="path to config.toml (default: see README)")
     p.add_argument("--self-test", action="store_true", help=argparse.SUPPRESS)
-    p.add_argument("--pick", action="store_true", help="always show the capture source popup")
-    p.add_argument("--device", help="capture device name (skips the popup)")
+    # older shortcuts pass it; the settings window now always opens
+    p.add_argument("--pick", action="store_true", help=argparse.SUPPRESS)
+    p.add_argument("--device", help="capture device name (starts capturing right away)")
     p.add_argument("--size", help="capture size, e.g. 1920x1080")
     p.add_argument("--fps", type=int, help="capture frame rate")
     p.add_argument("--format", help="auto, mjpeg, nv12 or yuyv422")
@@ -216,15 +217,41 @@ def _start_audio(src: dict, pattern_fmt: str | None):
         return None
 
 
-def _apply(renderer, cfg: dict, args: argparse.Namespace, audio=None) -> None:
-    """Push [output], [params], [passes] and [audio] to the renderer; a typo is reported, not fatal."""
+def _hint(cfg: dict, audio=None) -> str:
+    """The line under the stats: which keys do what, and the sound's delay."""
     hint = "   ".join(f"{key} {HINTS[action]}" for key, action in cfg["hotkeys"].items() if action in HINTS)
     if audio:
         hint += f"   audio {audio.latency_ms:.0f} ms"
+    return hint
+
+
+def _list_sources(renderer, src: dict, pattern_fmt: str | None) -> dict:
+    """Send the capture devices to the settings window's Source tab, with `src` picked.
+    Returns each device's modes by name."""
+    if pattern_fmt:  # the colour bars stand in for a device
+        found = [(src["device"], f"test pattern {pattern_fmt}")]
+        modes = {src["device"]: [devices.Mode(pattern_fmt, src["width"], src["height"], float(src["fps"]))]}
+    else:
+        found = devices.list_devices()
+        # shortcut: probes every device's modes at start and on Refresh; probe on
+        # selection instead if someone has many devices
+        modes = {name: devices.list_modes(name) for name, _ in found}
+    renderer.set_sources(
+        [(name, label, [(m.width, m.height, m.max_fps) for m in modes[name]]) for name, label in found],
+        src["device"],
+        src["width"],
+        src["height"],
+        src["fps"],
+    )
+    return modes
+
+
+def _apply(renderer, cfg: dict, args: argparse.Namespace, audio=None) -> None:
+    """Push [output], [params], [passes] and [audio] to the renderer; a typo is reported, not fatal."""
     sound = cfg["audio"]
     try:
         renderer.set_params(
-            hint=hint,
+            hint=_hint(cfg, audio),
             volume=sound["volume"],
             audio_delay_ms=sound["delay_ms"],
             **_output_from(cfg, args),
@@ -250,18 +277,9 @@ def main(argv: list[str] | None = None) -> int:
     cfg = config.load(cfg_path)
     last_path = cfg_path.with_name("last_source.json")
     src = _capture_from(cfg, args)
-    if not args.test_pattern and (args.pick or not src["device"]):
-        saved = _read_json(last_path)
-        if saved and not args.pick:
-            src.update(saved)
-        else:
-            from . import picker
-
-            chosen = picker.pick(saved or src)
-            if chosen is None:
-                return 0
-            last_path.write_text(json.dumps(chosen, indent=2))
-            src.update(chosen)
+    saved = _read_json(last_path)
+    if saved and not src["device"]:  # preselect the source started last time
+        src.update(saved)
 
     from . import Renderer  # late, so --list-devices works without a GPU
 
@@ -269,17 +287,40 @@ def main(argv: list[str] | None = None) -> int:
     r = Renderer(*out["out_size"], fullscreen=out["fullscreen"], vsync=out["vsync"], backend=out["backend"])
     gen = ai.FrameGen(r) if ai.available() else None
     r.set_params(ai_available=gen is not None)
-    pump = _Pump(r, src, args.test_pattern, gen)
-    audio = _start_audio(src, args.test_pattern)
-    _apply(r, cfg, args, audio)
+    _apply(r, cfg, args)
     watcher = config.Watcher(cfg_path)
     last_error, retried_at = "", 0.0
+    # capture runs only while the picture window is open
+    pump: _Pump | None = None
+    audio = None
+
+    def stop() -> None:
+        nonlocal pump, audio
+        if pump:
+            pump.stop()  # the device has one owner at a time
+            pump = None
+        if audio:
+            audio.close()
+            audio = None
+
+    def start() -> None:
+        nonlocal pump, audio
+        stop()
+        pump = _Pump(r, src, args.test_pattern, gen)
+        audio = _start_audio(src, args.test_pattern)
+        r.set_params(hint=_hint(cfg, audio))
+        r.toggle_pass("capture", True)
+
+    modes = _list_sources(r, src, args.test_pattern)
+    if args.device or args.test_pattern:  # named on the command line: no need to wait for Start
+        start()
 
     try:
         while True:
             time.sleep(0.02)
-            pump.framegen = r.framegen
-            if audio:  # the options panel owns these; playback follows it
+            if pump:
+                pump.framegen = r.framegen
+            if audio:  # the settings window owns these; playback follows it
                 on, audio.volume, audio.delay_ms = r.audio
                 audio.muted = not on
             for kind, value in r.poll_events():
@@ -287,18 +328,22 @@ def main(argv: list[str] | None = None) -> int:
                 action = cfg["hotkeys"].get(value, "") if kind == "key" else kind
                 if action in ("quit", "closed"):
                     return 0
-                if action == "pick_source" and not args.test_pattern:
-                    from . import picker
-
-                    pump.stop()  # the device has one owner at a time
-                    if audio:
-                        audio.close()
-                    chosen = picker.pick(src)
-                    if chosen:
-                        src = {**src, **chosen}
+                if action == "start":
+                    name, w, h, fps = value.split("\t")
+                    w, h, fps = int(w), int(h), int(fps)
+                    mode = None if args.test_pattern else devices.best_mode(modes.get(name, []), w, h, fps)
+                    chosen = {"device": name, "width": w, "height": h, "fps": fps, "format": mode.fmt if mode else "auto"}
+                    if not args.test_pattern:
                         last_path.write_text(json.dumps(chosen, indent=2))
-                    pump = _Pump(r, src, args.test_pattern, gen)
-                    audio = _start_audio(src, args.test_pattern)
+                    src = {**src, **chosen}
+                    start()
+                elif action == "stop":
+                    stop()
+                    r.toggle_pass("capture", False)  # the settings window comes back with it
+                elif action == "refresh_sources":
+                    modes = _list_sources(r, src, args.test_pattern)
+                elif action == "pick_source":
+                    r.toggle_pass("panel", True)
                 elif action == "pick_lut":
                     from . import picker
 
@@ -330,13 +375,10 @@ def main(argv: list[str] | None = None) -> int:
                 cfg = new
                 if source_moved and cfg["capture"]["device"] and not args.test_pattern:
                     src = _capture_from(cfg, args)
-                    pump.stop()
-                    pump = _Pump(r, src, args.test_pattern, gen)
-                    if audio:
-                        audio.close()
-                    audio = _start_audio(src, args.test_pattern)
+                    if pump:
+                        start()
 
-            if not pump.is_alive():
+            if pump and not pump.is_alive():
                 message = str(pump.error or "capture ended")
                 if message != last_error:
                     print(f"capture: {message} - retrying", file=sys.stderr)
@@ -347,16 +389,14 @@ def main(argv: list[str] | None = None) -> int:
                 pump = _Pump(r, src, args.test_pattern, gen)
                 retried_at = time.monotonic()
             elif last_error and time.monotonic() - retried_at > 3:  # a failed open dies well within this
-                _apply(r, cfg, args, audio)  # puts the normal hint line back
+                r.set_params(hint=_hint(cfg, audio))  # puts the normal hint line back
                 last_error = ""
     except KeyboardInterrupt:
         return 0
     finally:
-        pump.stop()
+        stop()
         if gen:
             gen.close()
-        if audio:
-            audio.close()
         r.close()
 
 
@@ -364,8 +404,7 @@ def gui(argv: list[str] | None = None) -> int:
     """Entry point for the desktop shortcut, which has no console: a start-up failure
     is shown in a message box instead of vanishing."""
     if argv is None:
-        # double-clicking the installed program starts at the capture source popup
-        argv = sys.argv[1:] or (["--pick"] if FROZEN else [])
+        argv = sys.argv[1:]
     try:
         return main(argv)
     except Exception as e:

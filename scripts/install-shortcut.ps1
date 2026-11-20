@@ -10,7 +10,7 @@ $shell = New-Object -ComObject WScript.Shell
 foreach ($folder in [Environment]::GetFolderPath("Desktop"), [Environment]::GetFolderPath("Programs")) {
     $link = $shell.CreateShortcut((Join-Path $folder "PS5 Scaler.lnk"))
     $link.TargetPath = $python
-    $link.Arguments = "-m ps5scaler.app --pick"
+    $link.Arguments = "-m ps5scaler.app"
     $link.WorkingDirectory = $repo   # config.toml and last_source.json live here
     $link.Description = "Real-time capture-card upscaler"
     $link.Save()

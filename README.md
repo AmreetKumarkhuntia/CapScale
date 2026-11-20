@@ -6,7 +6,7 @@ FSR 1, sharpened and colour graded on the GPU, with a few milliseconds of added
 delay.
 
 - **Rust** (`src/`) owns the window and the GPU pipeline (wgpu, WGSL shaders).
-- **Python** (`python/ps5scaler/`) owns capture, the source popup, hotkeys and config.
+- **Python** (`python/ps5scaler/`) owns capture, hotkeys and config.
 
 ## Build
 
@@ -21,9 +21,8 @@ uv run maturin develop --release
 ## Run
 
 ```
-uv run ps5scaler                    # popup to choose the capture card, then fullscreen
+uv run ps5scaler                    # settings window; pick the card on the Source tab, then Start capture
 uv run ps5scaler --list-devices     # devices and the modes they offer
-uv run ps5scaler --pick             # show the popup again
 uv run ps5scaler --windowed --device "Display capture-UVC03" --size 1920x1080 --fps 60
 uv run ps5scaler --test-pattern i420 --windowed    # colour bars, no card needed (also nv12, yuy2)
 uv run ps5scaler --test-pattern i420:30 --windowed # the same as a 30 fps picture in a 60 Hz signal
@@ -31,14 +30,14 @@ uv run ps5scaler --test-pattern i420:30 --windowed # the same as a 30 fps pictur
 
 To start it like any other program, run `scripts\install-shortcut.ps1` once. It puts
 a **PS5 Scaler** shortcut on the Desktop and in the Start menu: no console window,
-opens at the capture source popup, and shows errors on screen.
+opens at the settings window, and shows errors on screen.
 
 Close OBS (or anything else using the card) first: a capture device has one owner at a time.
 
 Game audio plays automatically: the card's sound input (the one named after the
 capture device) goes to the default speakers. On Windows it arrives about 50 ms
 after the picture, which is the floor for shared audio and below what people
-notice. The options panel has mute, volume and an extra delay for the case where
+notice. The settings window's Audio tab has mute, volume and an extra delay for the case where
 sound arrives before the picture. If the wrong input is picked, set
 `audio_device` under `[capture]` in `config.toml`.
 
@@ -46,15 +45,15 @@ sound arrives before the picture. If the wrong input is picked, set
 
 | Key | Does |
 |---|---|
-| F1 | Options panel |
+| F1 | Settings window on or off |
 | F2 | Stats overlay |
 | F3 | Before / after split (drag the divider) |
 | F4 | Next upscaler: AMD FSR 1 (EASU), Lanczos-3, bilinear |
 | F5 / F6 / F7 | RCAS / colour grading / LUT on or off |
 | F8 | Mute or unmute game audio |
-| F9 | Change capture source |
+| F9 | Show the settings window |
 | F11 | Fullscreen on or off |
-| Esc | Quit |
+| Esc | Close the picture window (capture stops, settings stay) |
 
 Keys are set in the `[hotkeys]` section of `config.toml`.
 
@@ -62,7 +61,9 @@ Keys are set in the `[hotkeys]` section of `config.toml`.
 
 Three ways to change the same values:
 
-1. **Options panel** (F1): source, output size, upscaler, sharpening, colour, LUT, audio.
+1. **Settings window** (opens with the app, F1): tabs for source, output size, frame rate,
+   upscaler / sharpening / colour / LUT, and audio. It stays open beside the picture, so
+   changes show live.
    "Save to config.toml" writes them to the file.
 2. **`config.toml`**: saving the file applies it while the app runs.
 3. **Python**: `Renderer.set_params(...)`, see below.
@@ -76,7 +77,7 @@ included), and GPU time per pass.
 ### Frame rate: current and target
 
 A console sends 60 pictures a second even when the game runs at 30: every frame
-arrives twice. The **Frame rate** section of the options panel deals with that.
+arrives twice. The **Frame rate** tab of the settings window deals with that.
 
 - **Current (game)**: the game's own rate. *auto* measures it by spotting the
   repeated frames; set 30 or 60 yourself if you know it.
@@ -132,7 +133,7 @@ is installed the switch is greyed out.
 In `config.toml` these are `ai_framegen` and `ai_still` under `[params]`.
 
 **HUD zones.** A minimap that turns over a moving road cannot be interpolated
-cleanly. In the Frame rate section, "+ box" or "+ circle" adds a zone; tick "Show
+cleanly. On the Frame rate tab, "+ box" or "+ circle" adds a zone; tick "Show
 and move zones" and drag the red outline over the minimap or HUD panel. Inside a
 zone generated frames show the real picture, so nothing there can smear or flicker.
 Up to eight zones; they are saved as `hud_zones`.
@@ -152,7 +153,7 @@ Most picture and sound problems come from the chain before the app:
 - **PS5 audio: Linear PCM, stereo.** With surround output, dialogue sits in the
   centre channel, which a stereo capture drops.
 - **RGB range:** leave the PS5 on Automatic or Limited; if blacks look crushed or
-  grey, switch Range in the options panel.
+  grey, switch Range on the settings window's Source tab.
 - **Capture card format matters.** A card that delivers uncompressed NV12 or YUY2
   has less delay and a cleaner picture than one that only offers MJPEG, and
   compression blocks make frame generation less accurate. `--list-devices` shows
@@ -166,7 +167,7 @@ Most picture and sound problems come from the chain before the app:
 ### Colour looks wrong?
 
 Capture cards do not always label their video correctly. If the picture is washed
-out or too dark, switch **Range** in the options panel; if colours are slightly
+out or too dark, switch **Range** on the settings window's Source tab; if colours are slightly
 tinted, switch **Matrix**. Then save.
 
 ## The pipeline
@@ -196,7 +197,7 @@ r = ps5scaler.Renderer(2560, 1440, fullscreen=True, vsync="mailbox")   # 0, 0 fi
 r.push_frame(array, fmt="nv12", width=1920, height=1080)               # newest frame wins
 r.set_params(sharpness=0.4, exposure=0.0, saturation=1.1,
              lut_path="film.cube", lut_strength=0.6, upscaler="easu")
-r.toggle_pass("rcas", False)      # upscale, rcas, grade, lut, split, overlay, panel, fullscreen
+r.toggle_pass("rcas", False)      # upscale, rcas, grade, lut, split, overlay, panel, capture, fullscreen
 r.stats                           # dict: fps, latency_ms, pass_ms, ...
 r.poll_events()                   # [("key", "F1"), ("closed", ""), ...]
 r.close()
@@ -219,7 +220,7 @@ src/                  Rust: one module per job
   shaders.rs          shader loading and hot reload
   lut.rs              .cube parser
   timing.rs           GPU timestamp queries
-  overlay.rs          stats overlay and options panel
+  overlay.rs          stats overlay, HUD zones and the settings window
   shared.rs           state shared between threads
 python/ps5scaler/     Python package
   app.py              command line and main loop
@@ -228,7 +229,7 @@ python/ps5scaler/     Python package
   audio.py            the card's sound to the speakers
   repeats.py          spot repeated frames (a 30 fps game in a 60 Hz signal)
   ai.py               optional AI frame generation (RIFE)
-  picker.py           source popup, LUT file dialog
+  picker.py           LUT file dialog, error messages
   config.py           config.toml load, save, live reload
   pattern.py          colour bar generator
   shaders/            one WGSL file per pass
@@ -254,7 +255,7 @@ can target it: in the NVIDIA app, add `PS5Scaler.exe` under Graphics > Program
 settings (for example to switch on Smooth Motion).
 
 Set the environment variable `WGPU_BACKEND` to `dx12` or `vulkan` to choose the
-graphics API; the options panel's Debug section shows which one is in use.
+graphics API; the settings window's Output tab shows which one is in use.
 
 ## Tests
 

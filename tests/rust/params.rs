@@ -95,6 +95,7 @@ fn saved_config_holds_current_values_and_reset_restores_the_look() {
         lift: [0.0, 0.5, 0.0],
         matrix: Some(Matrix::Bt601),
         panel: true,
+        capture: true,
         ..Default::default()
     };
     p.lut_path = r"C:\luts\film.cube".into();
@@ -113,7 +114,7 @@ fn saved_config_holds_current_values_and_reset_restores_the_look() {
     ] {
         assert!(toml.contains(line), "missing {line:?} in:\n{toml}");
     }
-    assert!(!toml.contains("panel"));
+    assert!(!toml.contains("panel") && !toml.contains("capture ="));
     p.reset_look();
     assert_eq!((p.sharpness, p.lift), (0.4, [0.0; 3]));
     assert_eq!(p.matrix, Some(Matrix::Bt601));
@@ -125,6 +126,7 @@ fn toggles_and_names() {
     assert_eq!(p.toggle("rcas", None), Ok(false));
     assert_eq!(p.toggle("rcas", Some(true)), Ok(true));
     assert!(p.toggle("nope", None).is_err());
+    assert_eq!(p.toggle("capture", None), Ok(true));
     assert_eq!(Upscaler::Easu.next(), Upscaler::Lanczos3);
     assert_eq!(Upscaler::parse("bilinear"), Some(Upscaler::Bilinear));
 }

@@ -30,13 +30,32 @@ pub enum Wake {
 /// Things the window reports back to Python through `Renderer.poll_events()`.
 pub enum Event {
     Key(String),
-    /// "Change source" in the options panel
-    PickSource,
-    /// "Load .cube" in the options panel
+    /// "Start capture" in the settings window: device name, width, height, fps
+    Start(String, u32, u32, u32),
+    /// The picture window was closed, or "Stop" pressed
+    Stop,
+    /// "Refresh" on the Source tab
+    RefreshSources,
+    /// "Load .cube" in the settings window
     PickLut,
-    /// "Save" in the options panel; carries the config.toml sections to write
+    /// "Save" in the settings window; carries the config.toml sections to write
     Save(String),
+    /// The settings window was closed: quit
     Closed,
+}
+
+/// A capture device: (name to open it by, label to show, modes as (width, height, max fps)).
+pub type Device = (String, String, Vec<(u32, u32, f32)>);
+
+/// The capture devices Python found, and the one picked on the Source tab.
+#[derive(Default)]
+pub struct Sources {
+    /// false until Python has listed the devices once
+    pub listed: bool,
+    pub devices: Vec<Device>,
+    pub device: usize,
+    pub size: (u32, u32),
+    pub fps: u32,
 }
 
 #[derive(Clone, Default)]
@@ -74,6 +93,7 @@ pub struct Shared {
     pub lut: Mutex<(u64, Option<Cube>)>,
     pub stats: Mutex<Stats>,
     pub events: Mutex<Vec<Event>>,
+    pub sources: Mutex<Sources>,
     pub proxy: Mutex<EventLoopProxy<Wake>>,
     pub closed: AtomicBool,
 }

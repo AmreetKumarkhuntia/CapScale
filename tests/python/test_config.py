@@ -36,7 +36,7 @@ def test_save_creates_a_missing_file_and_load_merges_defaults(tmp_path):
     config.save_sections(path, SAVED)
     cfg = config.load(path)
     assert cfg["params"]["sharpness"] == 1.5
-    assert cfg["output"]["fullscreen"] is True and cfg["hotkeys"]["Escape"] == "quit"
+    assert cfg["output"]["fullscreen"] is True and cfg["hotkeys"]["Escape"] == "stop"
 
 
 def test_unknown_section_is_an_error_and_watcher_sees_a_save(tmp_path):

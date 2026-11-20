@@ -1,9 +1,9 @@
 # ps5scaler settings. Saving this file applies the changes while the app runs.
-# The options panel (F1) edits the same values; its Save button rewrites the
+# The settings window (F1) edits the same values; its Save button rewrites the
 # [output], [params], [passes] and [audio] sections below.
 
 [capture]
-device = ""          # empty: use the popup (its last choice is remembered in last_source.json)
+device = ""          # picked on the settings window's Source tab; empty: the one started last time (last_source.json)
 width = 1920
 height = 1080
 fps = 60
@@ -11,7 +11,7 @@ format = "auto"      # auto | mjpeg | nv12 | yuyv422   (auto prefers raw when th
 audio_device = ""    # empty: the sound input named after the capture device
 
 [hotkeys]
-Escape = "quit"
+Escape = "stop"      # close the picture window, back to the settings window
 F1 = "toggle:panel"
 F2 = "toggle:overlay"
 F3 = "toggle:split"
@@ -22,7 +22,7 @@ F7 = "toggle:lut"
 F8 = "toggle:audio"
 F9 = "pick_source"
 F11 = "toggle:fullscreen"
-# other actions: "save" (write the current settings to this file), "pick_lut"
+# other actions: "quit", "save" (write the current settings to this file), "pick_lut"
 
 [output]
 width = 2560            # 0 x 0: fit the display

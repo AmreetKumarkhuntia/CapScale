@@ -1,4 +1,4 @@
-//! The render thread: window, surface, and the per-frame loop.
+//! The render thread: the picture window, the settings window, and the per-frame loop.
 
 use std::collections::VecDeque;
 use std::path::PathBuf;
@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use winit::application::ApplicationHandler;
-use winit::dpi::PhysicalSize;
+use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::event::{ElementState, KeyEvent, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::keyboard::Key;
@@ -82,8 +82,25 @@ struct App {
     gfx: Option<Gfx>,
 }
 
-struct Gfx {
+/// The settings window: egui only, drawn when its UI changes and a few times a second
+/// for the live numbers in it.
+struct Settings {
     window: Arc<Window>,
+    surface: wgpu::Surface<'static>,
+    config: wgpu::SurfaceConfiguration,
+    overlay: Overlay,
+    /// The UI changed and is waiting for a redraw (see UI_REDRAW_GAP).
+    dirty: bool,
+    last_render: Instant,
+    shown: bool,
+}
+
+struct Gfx {
+    /// The picture window; hidden while not capturing.
+    window: Arc<Window>,
+    /// Whether the picture window is showing.
+    shown: bool,
+    settings: Settings,
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
     present_modes: Vec<wgpu::PresentMode>,
@@ -105,7 +122,7 @@ struct Gfx {
     dragging: bool,
     /// The UI changed and is waiting for a redraw (see UI_REDRAW_GAP).
     ui_dirty: bool,
-    /// The panel or the split divider is showing, so pointer events matter.
+    /// The split divider or the HUD zones are showing, so pointer events matter.
     interactive: bool,
     rendered: u64,
     /// Seconds between the most recent pictures, newest last.
@@ -145,13 +162,22 @@ impl Gfx {
         params: Params,
         proxy: EventLoopProxy<Wake>,
     ) -> Result<Self, String> {
+        // the picture window opens when capture starts (see `sync_windows`)
         let attributes = Window::default_attributes()
             .with_title("ps5scaler")
             .with_inner_size(PhysicalSize::new(1280, 720))
-            .with_fullscreen(params.fullscreen.then_some(Fullscreen::Borderless(None)));
+            .with_visible(false);
         let window = Arc::new(
             el.create_window(attributes)
                 .map_err(|e| format!("cannot create the window: {e}"))?,
+        );
+        let settings_window = Arc::new(
+            el.create_window(
+                Window::default_attributes()
+                    .with_title("PS5 Scaler")
+                    .with_inner_size(LogicalSize::new(460, 760)),
+            )
+            .map_err(|e| format!("cannot create the settings window: {e}"))?,
         );
 
         // "auto" leaves the choice to wgpu, or to the WGPU_BACKEND environment variable
@@ -166,6 +192,9 @@ impl Gfx {
         let instance = wgpu::Instance::new(instance_options);
         let surface = instance
             .create_surface(window.clone())
+            .map_err(|e| e.to_string())?;
+        let settings_surface = instance
+            .create_surface(settings_window.clone())
             .map_err(|e| e.to_string())?;
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
@@ -207,6 +236,24 @@ impl Gfx {
         config.present_mode = present_mode(&caps.present_modes, params.vsync);
         config.desired_maximum_frame_latency = 1;
         surface.configure(&device, &config);
+        let size = settings_window.inner_size();
+        let settings_config = wgpu::SurfaceConfiguration {
+            width: size.width.max(1),
+            height: size.height.max(1),
+            present_mode: wgpu::PresentMode::Fifo,
+            desired_maximum_frame_latency: 2,
+            ..config.clone()
+        };
+        settings_surface.configure(&device, &settings_config);
+        let settings = Settings {
+            overlay: Overlay::new(&device, config.format, &settings_window),
+            window: settings_window,
+            surface: settings_surface,
+            config: settings_config,
+            dirty: true,
+            last_render: Instant::now(),
+            shown: true,
+        };
 
         let shaders = ShaderDir::new(shader_dir);
         let pipeline = Pipeline::new(&device, config.format, &shaders)?;
@@ -220,7 +267,6 @@ impl Gfx {
             ),
             ..Default::default()
         };
-        let fullscreen = params.fullscreen;
         let shared = Arc::new(Shared {
             device,
             queue,
@@ -229,11 +275,14 @@ impl Gfx {
             lut: Mutex::new((0, None)),
             stats: Mutex::new(stats),
             events: Mutex::default(),
+            sources: Mutex::default(),
             proxy: Mutex::new(proxy),
             closed: false.into(),
         });
         Ok(Self {
             window,
+            shown: false,
+            settings,
             surface,
             config,
             present_modes: caps.present_modes,
@@ -249,7 +298,7 @@ impl Gfx {
             last_render: Instant::now(),
             render_fps: 0.0,
             last_hot_reload: Instant::now(),
-            fullscreen,
+            fullscreen: false,
             cursor_visible: true,
             cursor_x: 0.0,
             dragging: false,
@@ -307,6 +356,156 @@ impl Gfx {
         }
     }
 
+    /// Show or hide the two windows to match `capture` and `panel`.
+    fn sync_windows(&mut self) {
+        let (capture, panel, fullscreen) = {
+            let mut p = lock(&self.shared.params);
+            // the settings window is the way to quit: never leave the app with no window
+            if !p.capture {
+                p.panel = true;
+            }
+            (p.capture, p.panel, p.fullscreen)
+        };
+        if capture != self.shown {
+            self.shown = capture;
+            if capture {
+                self.fullscreen = fullscreen;
+                self.window
+                    .set_fullscreen(fullscreen.then_some(Fullscreen::Borderless(None)));
+                self.window.set_visible(true);
+                self.window.focus_window();
+                self.window.request_redraw();
+            } else {
+                self.window.set_visible(false);
+            }
+        }
+        if panel != self.settings.shown {
+            self.settings.shown = panel;
+            self.settings.window.set_visible(panel);
+            if panel {
+                self.settings.window.focus_window();
+                self.settings.dirty = true;
+            }
+        }
+    }
+
+    /// Draw the settings window and act on what was clicked in it.
+    fn render_settings(&mut self) {
+        let shared = self.shared.clone();
+        let (device, queue) = (&shared.device, &shared.queue);
+        let st = &mut self.settings;
+        st.dirty = false;
+        st.last_render = Instant::now();
+        use wgpu::CurrentSurfaceTexture as Current;
+        let frame = match st.surface.get_current_texture() {
+            Current::Success(frame) | Current::Suboptimal(frame) => frame,
+            Current::Outdated | Current::Lost => {
+                st.surface.configure(device, &st.config);
+                st.dirty = true;
+                return;
+            }
+            Current::Timeout | Current::Occluded | Current::Validation => return,
+        };
+        let view = frame.texture.create_view(&Default::default());
+        let mut encoder = device.create_command_encoder(&Default::default());
+        let mut params = lock(&shared.params).clone();
+        let before = params.clone();
+        let stats = lock(&shared.stats).clone();
+        let mut sources = lock(&shared.sources);
+        let (action, animating) = st.overlay.prepare(
+            &st.window,
+            device,
+            queue,
+            &mut encoder,
+            [st.config.width, st.config.height],
+            [0.0; 4],
+            &mut params,
+            &stats,
+            Some(&mut sources),
+        );
+        match action {
+            Action::None => {}
+            // opening the device is Python's job; it sets `capture` once it has
+            Action::Start => {
+                if let Some((name, _, _)) = sources.devices.get(sources.device) {
+                    let (w, h) = sources.size;
+                    lock(&shared.events).push(Event::Start(name.clone(), w, h, sources.fps));
+                }
+            }
+            Action::Stop => {
+                params.capture = false;
+                lock(&shared.events).push(Event::Stop);
+            }
+            Action::Refresh => {
+                sources.listed = false;
+                lock(&shared.events).push(Event::RefreshSources);
+            }
+            // these need a file dialog or the config file, which Python owns
+            Action::PickLut => lock(&shared.events).push(Event::PickLut),
+            Action::Save => lock(&shared.events).push(Event::Save(params.to_toml())),
+            Action::ClearLut => {
+                params.lut_path.clear();
+                let mut lut = lock(&shared.lut);
+                lut.0 += 1;
+                lut.1 = None;
+            }
+        }
+        drop(sources);
+        if params != before {
+            *lock(&shared.params) = params.clone();
+            self.window.request_redraw();
+        }
+        st.dirty = animating;
+        {
+            let mut pass = encoder
+                .begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("settings"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                })
+                .forget_lifetime();
+            st.overlay.paint(&mut pass);
+        }
+        queue.submit([encoder.finish()]);
+        st.window.pre_present_notify();
+        queue.present(frame);
+    }
+
+    /// An event for the settings window.
+    fn settings_event(&mut self, el: &ActiveEventLoop, event: WindowEvent) {
+        let st = &mut self.settings;
+        let (_, repaint) = st.overlay.on_event(&st.window, &event);
+        if repaint && !matches!(event, WindowEvent::RedrawRequested) {
+            st.dirty = true;
+        }
+        match event {
+            WindowEvent::CloseRequested => {
+                self.shared.closed.store(true, Ordering::Release);
+                lock(&self.shared.events).push(Event::Closed);
+                el.exit();
+            }
+            WindowEvent::Resized(size) if size.width > 0 && size.height > 0 => {
+                st.config.width = size.width;
+                st.config.height = size.height;
+                st.surface.configure(&self.shared.device, &st.config);
+                st.dirty = true;
+            }
+            WindowEvent::RedrawRequested => self.render_settings(),
+            _ => {}
+        }
+    }
+
     fn render(&mut self) {
         let shared = self.shared.clone();
         let (device, queue) = (&shared.device, &shared.queue);
@@ -339,6 +538,9 @@ impl Gfx {
             }
         }
         let mut params = lock(&shared.params).clone();
+        if !params.capture {
+            return;
+        }
         let before = params.clone();
 
         if params.fullscreen != self.fullscreen {
@@ -351,7 +553,7 @@ impl Gfx {
             self.config.present_mode = mode;
             self.surface.configure(device, &self.config);
         }
-        let cursor_visible = !self.fullscreen || params.panel || params.split;
+        let cursor_visible = !self.fullscreen || params.split || params.edit_zones;
         if cursor_visible != self.cursor_visible {
             self.cursor_visible = cursor_visible;
             self.window.set_cursor_visible(cursor_visible);
@@ -391,7 +593,7 @@ impl Gfx {
             image_w,
             image_h,
         ];
-        let (action, animating) = self.overlay.prepare(
+        let (_, animating) = self.overlay.prepare(
             &self.window,
             device,
             queue,
@@ -400,25 +602,13 @@ impl Gfx {
             image,
             &mut params,
             &stats,
+            None,
         );
-        match action {
-            Action::None => {}
-            // these need a file dialog or the config file, which Python owns
-            Action::PickSource => lock(&shared.events).push(Event::PickSource),
-            Action::PickLut => lock(&shared.events).push(Event::PickLut),
-            Action::Save => lock(&shared.events).push(Event::Save(params.to_toml())),
-            Action::ClearLut => {
-                params.lut_path.clear();
-                let mut lut = lock(&shared.lut);
-                lut.0 += 1;
-                lut.1 = None;
-            }
-        }
         if params != before {
             *lock(&shared.params) = params.clone();
         }
         self.ui_dirty = animating || params != before;
-        self.interactive = params.panel || params.split;
+        self.interactive = params.split || params.edit_zones;
 
         // Frame generation. Between two content frames, `multiple - 1` generated
         // pictures are shown and then the real one, evenly spaced over one content
@@ -599,8 +789,12 @@ impl ApplicationHandler<Wake> for App {
         }
     }
 
-    fn window_event(&mut self, el: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, el: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
         let Some(gfx) = self.gfx.as_mut() else { return };
+        if id == gfx.settings.window.id() {
+            gfx.settings_event(el, event);
+            return;
+        }
         let (used_by_ui, repaint) = gfx.overlay.on_event(&gfx.window, &event);
         // egui reports RedrawRequested itself as "needs a repaint"; obeying that would
         // redraw in a loop as fast as the GPU allows
@@ -608,10 +802,10 @@ impl ApplicationHandler<Wake> for App {
             gfx.ui_dirty = true;
         }
         match event {
+            // closing the picture only stops capture; `sync_windows` hides it
             WindowEvent::CloseRequested => {
-                gfx.shared.closed.store(true, Ordering::Release);
-                lock(&gfx.shared.events).push(Event::Closed);
-                el.exit();
+                lock(&gfx.shared.params).capture = false;
+                lock(&gfx.shared.events).push(Event::Stop);
             }
             WindowEvent::Resized(size) => gfx.resize(size),
             WindowEvent::RedrawRequested => gfx.render(),
@@ -657,7 +851,18 @@ impl ApplicationHandler<Wake> for App {
         // wake up between frames too, so a saved shader is picked up while the source is idle
         let mut wake = Instant::now() + HOT_RELOAD_EVERY;
         if let Some(gfx) = self.gfx.as_mut() {
+            gfx.sync_windows();
             gfx.hot_reload();
+            let st = &mut gfx.settings;
+            if st.shown {
+                // redrawn now and then anyway, for the live numbers and changes made elsewhere
+                let due = st.last_render + if st.dirty { UI_REDRAW_GAP } else { HOT_RELOAD_EVERY };
+                if Instant::now() >= due {
+                    st.window.request_redraw();
+                } else {
+                    wake = wake.min(due);
+                }
+            }
             if gfx.ui_dirty {
                 let due = gfx.last_render + UI_REDRAW_GAP;
                 if Instant::now() >= due {

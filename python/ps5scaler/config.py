@@ -20,7 +20,7 @@ DEFAULTS: dict = {
     "passes": {},  # name = true/false, see Renderer.toggle_pass
     "audio": {"enabled": True, "volume": 1.0, "delay_ms": 0.0},
     "hotkeys": {
-        "Escape": "quit",
+        "Escape": "stop",  # close the picture window, back to the settings window
         "F1": "toggle:panel",
         "F2": "toggle:overlay",
         "F3": "toggle:split",

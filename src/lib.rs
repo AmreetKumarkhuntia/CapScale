@@ -294,7 +294,8 @@ impl Renderer {
     }
 
     /// Turn a pass or view on or off; with `on` left out, flip it. Returns the new state.
-    /// Names: upscale, rcas, grade, lut, split, overlay, panel, fullscreen, audio, zones.
+    /// Names: upscale, rcas, grade, lut, split, overlay, panel (the settings window),
+    /// capture (the picture window), fullscreen, audio, zones.
     #[pyo3(signature = (name, on=None))]
     fn toggle_pass(&self, name: &str, on: Option<bool>) -> PyResult<bool> {
         let state = lock(&self.shared.params)
@@ -334,18 +335,40 @@ impl Renderer {
     }
 
     /// Window events since the last call, as (kind, value):
-    /// ("key", "F1"), ("pick_source", ""), ("pick_lut", ""), ("save", <config text>), ("closed", "").
+    /// ("key", "F1"), ("start", "<device>\t<width>\t<height>\t<fps>"), ("stop", ""),
+    /// ("refresh_sources", ""), ("pick_lut", ""), ("save", <config text>), ("closed", "").
     fn poll_events(&self) -> Vec<(&'static str, String)> {
         std::mem::take(&mut *lock(&self.shared.events))
             .into_iter()
             .map(|event| match event {
                 Event::Key(name) => ("key", name),
-                Event::PickSource => ("pick_source", String::new()),
+                Event::Start(device, w, h, fps) => ("start", format!("{device}\t{w}\t{h}\t{fps}")),
+                Event::Stop => ("stop", String::new()),
+                Event::RefreshSources => ("refresh_sources", String::new()),
                 Event::PickLut => ("pick_lut", String::new()),
                 Event::Save(toml) => ("save", toml),
                 Event::Closed => ("closed", String::new()),
             })
             .collect()
+    }
+
+    /// The capture devices for the Source tab, as (name, label, [(width, height, max fps)]),
+    /// with the given one picked if it is there.
+    #[pyo3(signature = (devices, device="", width=1920, height=1080, fps=60))]
+    fn set_sources(
+        &self,
+        devices: Vec<shared::Device>,
+        device: &str,
+        width: u32,
+        height: u32,
+        fps: u32,
+    ) {
+        let mut s = lock(&self.shared.sources);
+        s.device = devices.iter().position(|d| d.0 == device).unwrap_or(0);
+        s.devices = devices;
+        (s.size, s.fps, s.listed) = ((width, height), fps, true);
+        drop(s);
+        self.shared.wake(Wake::Redraw);
     }
 
     /// Current settings as the [output], [params], [passes] and [audio] sections of config.toml.

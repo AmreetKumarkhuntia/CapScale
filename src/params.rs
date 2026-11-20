@@ -134,7 +134,7 @@ pub struct Zone {
     pub ellipse: bool,
 }
 
-pub const TOGGLES: [&str; 10] = [
+pub const TOGGLES: [&str; 11] = [
     "audio",
     "zones",
     "upscale",
@@ -144,6 +144,7 @@ pub const TOGGLES: [&str; 10] = [
     "split",
     "overlay",
     "panel",
+    "capture",
     "fullscreen",
 ];
 
@@ -180,7 +181,10 @@ pub struct Params {
     pub lut: bool,
     pub split: bool,
     pub overlay: bool,
+    /// The settings window is shown.
     pub panel: bool,
+    /// The picture window is shown (capture is running).
+    pub capture: bool,
     /// One line shown under the stats, e.g. which keys do what. Set from Python,
     /// which owns the hotkeys.
     pub hint: String,
@@ -244,7 +248,8 @@ impl Default for Params {
             lut: true,
             split: false,
             overlay: true,
-            panel: false,
+            panel: true,
+            capture: false,
             hint: String::new(),
             audio: true,
             volume: 1.0,
@@ -274,9 +279,10 @@ impl Params {
             "split" => &mut self.split,
             "overlay" => &mut self.overlay,
             "panel" => &mut self.panel,
+            "capture" => &mut self.capture,
             "fullscreen" => &mut self.fullscreen,
             "audio" => &mut self.audio,
-            // show the HUD zone outlines for dragging (needs the panel open)
+            // show the HUD zone outlines on the picture for dragging
             "zones" => &mut self.edit_zones,
             _ => {
                 return Err(format!(
@@ -344,7 +350,7 @@ impl Params {
 
     /// The config.toml sections the options panel owns ([output], [params], [passes],
     /// [audio]), holding the current values.
-    /// `panel` is left out on purpose: saving from the panel should not pin it open.
+    /// `panel` and `capture` are left out on purpose: they are window state, not settings.
     pub fn to_toml(&self) -> String {
         // numbers as TOML floats; a bare `1` would come back as an integer
         let f = |v: f32| format!("{v:?}");
