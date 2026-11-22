@@ -10,7 +10,7 @@ BARS = [(1, 1, 1), (1, 1, 0), (0, 1, 1), (0, 1, 0), (1, 0, 1), (1, 0, 0), (0, 0,
 
 
 class Pattern:
-    """Same interface as capture.Capture."""
+    """Same interface as capture.stream.Capture."""
 
     def __init__(
         self, fmt: str, width: int = 1920, height: int = 1080, fps: float = 60, content_fps: float | None = None

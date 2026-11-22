@@ -20,9 +20,8 @@ F5 = "toggle:rcas"
 F6 = "toggle:grade"
 F7 = "toggle:lut"
 F8 = "toggle:audio"
-F9 = "pick_source"
 F11 = "toggle:fullscreen"
-# other actions: "quit", "save" (write the current settings to this file), "pick_lut"
+# other actions: "quit", "save" (write the current settings to this file)
 
 [output]
 width = 2560            # 0 x 0: fit the display

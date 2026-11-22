@@ -10,9 +10,10 @@ import time
 import tomllib
 from pathlib import Path
 
-from . import ai, config, devices
-from ._core import frame_plan
-from .repeats import Cadence, luma_of
+from . import ai, config
+from .capture import devices
+from ._core import frame_plan, show_error
+from .capture.repeats import Cadence, luma_of
 
 FROZEN = getattr(sys, "frozen", False)
 
@@ -24,7 +25,6 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--list-devices", action="store_true", help="print capture devices and their modes")
     p.add_argument("--config", help="path to config.toml (default: see README)")
     p.add_argument("--self-test", action="store_true", help=argparse.SUPPRESS)
-    p.add_argument("--pick", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--device", help="capture device name (starts capturing right away)")
     p.add_argument("--size", help="capture size, e.g. 1920x1080")
     p.add_argument("--fps", type=int, help="capture frame rate")
@@ -53,12 +53,11 @@ def _self_test(log: Path) -> int:
     """Load every part the app needs, without opening a window. Checks a packaged
     build, where a module or data file left out only shows up at run time."""
     try:
-        import tkinter  # noqa: F401
-
         import av  # noqa: F401
         import sounddevice  # noqa: F401
 
-        from . import Renderer, audio, capture, pattern, picker  # noqa: F401
+        from . import Renderer, audio  # noqa: F401
+        from .capture import pattern, stream  # noqa: F401
 
         if ai.available():
             ai.Model(1920, 1080)
@@ -123,11 +122,11 @@ def _read_json(path: Path) -> dict | None:
 
 def _open(src: dict, pattern_fmt: str | None):
     if pattern_fmt:
-        from .pattern import Pattern
+        from .capture.pattern import Pattern
 
         fmt, _, content = pattern_fmt.partition(":")
         return Pattern(fmt, src["width"], src["height"], src["fps"], float(content or src["fps"]))
-    from .capture import Capture
+    from .capture.stream import Capture
 
     fmt = src["format"]
     if fmt == "auto":
@@ -328,17 +327,6 @@ def main(argv: list[str] | None = None) -> int:
                     r.toggle_pass("capture", False)
                 elif action == "refresh_sources":
                     modes = _list_sources(r, src, args.test_pattern)
-                elif action == "pick_source":
-                    r.toggle_pass("panel", True)
-                elif action == "pick_lut":
-                    from . import picker
-
-                    path = picker.pick_lut()
-                    if path:
-                        try:
-                            r.set_params(lut_path=path)
-                        except ValueError as e:
-                            picker.show_error(str(e))
                 elif action == "save":
                     config.save_sections(cfg_path, value if kind == "save" else r.config_toml())
                     print(f"settings saved to {cfg_path}")
@@ -393,9 +381,7 @@ def gui(argv: list[str] | None = None) -> int:
     try:
         return main(argv)
     except Exception as e:
-        from . import picker
-
-        picker.show_error(f"CapScale could not start.\n\n{type(e).__name__}: {e}")
+        show_error(f"CapScale could not start.\n\n{type(e).__name__}: {e}")
         return 1
 
 

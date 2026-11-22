@@ -1,7 +1,7 @@
 use std::fs;
 use std::time::SystemTime;
 
-use capscale::shaders::ShaderDir;
+use capscale::render::ShaderDir;
 
 #[test]
 fn source_is_common_plus_pass_and_changes_are_noticed() {

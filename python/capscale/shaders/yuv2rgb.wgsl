@@ -1,5 +1,5 @@
 // Pass 1: captured YUV -> gamma-encoded R'G'B' at capture resolution.
-// The matrix and range are folded into g.yuv0..2 on the CPU (src/params.rs).
+// The matrix and range are folded into g.yuv0..2 on the CPU (src/params/globals.rs).
 // The target has the capture size, so every fragment is exactly one source pixel.
 
 @fragment

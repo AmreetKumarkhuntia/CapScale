@@ -39,6 +39,7 @@ Linked or imported, not copied into this repository; each keeps its own licence.
 | [wgpu](https://github.com/gfx-rs/wgpu) | GPU device, shaders, presentation | MIT or Apache-2.0 |
 | [winit](https://github.com/rust-windowing/winit) | Window and input | Apache-2.0 |
 | [egui](https://github.com/emilk/egui), egui-wgpu, egui-winit | Stats overlay and options panel (bundles the Ubuntu and Hack fonts) | MIT or Apache-2.0 |
+| [rfd](https://github.com/PolyMeilex/rfd) | Native file dialog and message box | MIT |
 | [PyO3](https://github.com/PyO3/pyo3), [rust-numpy](https://github.com/PyO3/rust-numpy) | Python bindings, borrowing NumPy arrays | MIT or Apache-2.0, BSD-2-Clause |
 | [bytemuck](https://github.com/Lokathor/bytemuck), [half](https://github.com/VoidStarKat/half-rs), [pollster](https://github.com/zesterer/pollster) | Byte casts, half floats, blocking on futures | Zlib / MIT / Apache-2.0 |
 | [PyAV](https://github.com/PyAV-Org/PyAV) (FFmpeg) | Capture and MJPEG decoding | BSD-3-Clause (FFmpeg: LGPL/GPL) |

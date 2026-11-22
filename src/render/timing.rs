@@ -1,29 +1,9 @@
 //! Per-pass GPU time from timestamp queries, read back a frame or two later.
 
 use std::cell::Cell;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
-
-pub const SLOTS: usize = 7;
-const QUERIES: u32 = SLOTS as u32 * 2;
-const BYTES: u64 = QUERIES as u64 * 8;
-
-struct Gpu {
-    set: wgpu::QuerySet,
-    resolve: wgpu::Buffer,
-    read: wgpu::Buffer,
-    period_ns: f32,
-}
-
-pub struct Timing {
-    gpu: Option<Gpu>,
-    /// Milliseconds per slot from the last completed readback; 0 for passes that did not run.
-    pub ms: [f32; SLOTS],
-    used: Cell<u8>,
-    copied: bool,
-    in_flight: Option<u8>,
-    ready: Arc<AtomicBool>,
-}
+use super::types::{Gpu, Timing, BYTES, QUERIES, SLOTS};
 
 impl Timing {
     /// `enabled` is whether the device was created with `Features::TIMESTAMP_QUERY`.

@@ -3,20 +3,14 @@ from __future__ import annotations
 
 import re
 import sys
-from typing import NamedTuple
 
 import av
 import av.logging
 
+from .types import Mode
+
 BACKEND = "dshow" if sys.platform == "win32" else "v4l2"
 PREFERRED = ("nv12", "yuyv422", "mjpeg")
-
-
-class Mode(NamedTuple):
-    fmt: str
-    width: int
-    height: int
-    max_fps: float
 
 
 def list_devices() -> list[tuple[str, str]]:

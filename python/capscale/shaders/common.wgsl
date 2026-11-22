@@ -1,5 +1,5 @@
 // Shared header. The renderer puts this file in front of every pass shader,
-// because WGSL has no #include. Mirrors `Globals` in src/params.rs.
+// because WGSL has no #include. Mirrors `Globals` in src/params/types.rs.
 
 struct Globals {
     src_size: vec4<f32>,       // capture w, h, 1/w, 1/h

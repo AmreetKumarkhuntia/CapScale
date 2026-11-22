@@ -1,0 +1,217 @@
+# User guide
+
+## What you need
+
+- 64-bit Windows.
+- A capture card that offers MJPEG, NV12 or YUY2 video. Raw NV12 or YUY2 gives less
+  delay and a cleaner picture than MJPEG.
+- A graphics card with DirectX 12 or Vulkan.
+- For the optional AI frame generation: an NVIDIA RTX card and about 4 GB of disk.
+
+## Install and remove
+
+Download `CapScale-Setup-<version>.exe` from the
+[Releases](https://github.com/AmreetKumarkhuntia/CapScale/releases) page and run it.
+It installs for the current user only, so it never asks for administrator rights.
+
+Options on the installer's task page:
+
+| Option | Default | Does |
+|---|---|---|
+| Create a desktop shortcut | on | adds CapScale to the Desktop (it is always in the Start menu) |
+| Download AI frame generation | off | fetches the 4 GB AI runtime; a console window shows the download, press Enter when it says it is done |
+
+The AI download can be added later from **CapScale AI setup** in the Start menu.
+
+To remove CapScale use Windows' *Installed apps*. That removes the program and the
+AI download. Your settings stay in `%APPDATA%\CapScale`; delete that folder for a
+clean slate.
+
+## Getting a picture
+
+1. Connect the console's HDMI to the capture card and the card to the PC by USB.
+2. Close OBS, Discord streaming, or anything else using the card. A capture device
+   has one owner at a time.
+3. Start CapScale. On the **Source** tab pick the card, 1920 x 1080 and 60, then
+   press **Start capture**.
+4. The picture opens in its own window. F11 toggles fullscreen, Escape stops.
+
+The choice is remembered: the next start has the same card and mode picked.
+
+## The two windows
+
+- **Settings window.** Opens with the app and stays open. Closing it quits CapScale.
+- **Picture window.** Appears when capture starts and hides when it stops. Closing
+  it (or pressing Escape) stops capture and returns you to the settings window.
+
+Changes in the settings window apply at once. They are kept for the next start only
+after **Save to config.toml**. **Reset look** puts sharpening, colour and LUT
+strength back to their defaults.
+
+## Settings window, tab by tab
+
+### Getting started
+
+The steps above. Shown first on a machine that has not captured before.
+
+### Source
+
+| Control | Meaning |
+|---|---|
+| Device, Resolution, Frame rate | the card and the mode to ask it for. Only modes the card offers are listed |
+| Start capture / Restart capture | open the card with that mode |
+| Stop | stop capture and hide the picture window |
+| Refresh devices | look for cards again, after plugging one in |
+| Range: auto / limited / full | how the card's brightness values are read. Switch it if the picture is washed out or too dark |
+| Matrix: auto / bt601 / bt709 | which colour standard the card uses. Switch it if colours are slightly tinted |
+
+The line above Range shows what is arriving, for example
+`1920x1080 i420 limited bt709`.
+
+### Output
+
+| Control | Meaning |
+|---|---|
+| render size | the size the picture is upscaled to: fit the window, 1080p, 1440p or 4K |
+| Borderless fullscreen | fullscreen without a mode switch |
+| Present: mailbox / fifo / immediate | how finished pictures are handed to the display. *mailbox* is the default: no tearing, lowest delay. *fifo* is classic vsync. *immediate* can tear |
+| Graphics API (next start) | auto, dx12 or vulkan. Takes effect at the next start; the line below shows the one in use |
+| Stats overlay on the picture | the numbers in the top-left corner (F2) |
+| Before / after split | the untouched source on the left, the processed picture on the right; drag the divider (F3) |
+
+### Frame rate
+
+See [Frame rate](#frame-rate-1) below.
+
+### Picture
+
+| Control | Meaning |
+|---|---|
+| Upscaler: AMD FSR 1 / Lanczos-3 / Bilinear | how the picture is enlarged. With the box unticked it is plain bilinear |
+| AMD FSR 1 sharpening (RCAS), sharpness | **0 is the sharpest**; each +1 halves the effect, up to 2 |
+| Colour grading | exposure (stops), contrast, saturation, vibrance, temperature, tint, gamma, lift, lgg gamma, gain |
+| Apply 3D LUT, Load .cube..., Clear, strength | a look-up table in `.cube` format (3D only), blended by strength |
+
+### Audio
+
+| Control | Meaning |
+|---|---|
+| Game audio | play the card's sound (F8) |
+| volume | 0 to 1.5 |
+| delay ms | holds the sound back, for when it arrives before the picture |
+
+## Keys
+
+Keys work while the picture window has focus.
+
+| Key | Does |
+|---|---|
+| F1 | settings window on or off |
+| F2 | stats overlay |
+| F3 | before / after split |
+| F4 | next upscaler |
+| F5 / F6 / F7 | sharpening / colour grading / LUT on or off |
+| F8 | mute or unmute game audio |
+| F9 | show the settings window |
+| F11 | fullscreen on or off |
+| Esc | stop capture, hide the picture window |
+
+They can be changed in the `[hotkeys]` section of `config.toml`; see
+[Configuration](configuration.md#hotkeys).
+
+## Frame rate
+
+A console sends 60 pictures a second even when the game runs at 30: every frame
+arrives twice. This tab turns those repeats into generated in-between frames.
+
+| Control | Meaning |
+|---|---|
+| Current (game): auto / 30 / 60 | the game's own rate. *auto* measures it from the repeated frames |
+| Target: off / 60 / 90 / 120 / 180 | the rate to show. *off* shows frames as they arrive |
+| AI frames (RIFE) | use the AI model instead of the built-in method. Greyed out until the AI download is installed |
+| AI: leave still areas untouched | where nothing moves, a generated frame is the real picture |
+| HUD zones: + box, + circle, remove last | areas kept out of frame generation |
+| Show and move zones | draws the zones as red outlines on the picture so they can be dragged and resized |
+
+Only whole multiples are generated: a target of 100 on a 30 fps game gives 90.
+
+**What it costs.** A real frame waits while the generated frames before it are
+shown: about 17 ms for 30 to 60, about 25 ms for 30 to 120. The AI method adds the
+time one generated frame takes (10 to 12 ms for 1080p on an RTX 5070). The line at
+the bottom of the tab and the stats overlay show the real figures.
+
+**What to expect.** Camera pans and a still HUD are handled well. A small object
+moving against the background, and a thin strip at the screen edges during a pan,
+can smear or flicker in generated frames.
+
+**HUD zones.** A minimap turning over a moving road cannot be interpolated cleanly.
+Add a zone, tick *Show and move zones* and drag the outline over it. Inside a zone,
+generated frames show the real picture. Up to eight zones; they are saved with
+*Save to config.toml*.
+
+**AI method.** A neural network trained on real video, where the built-in method
+is a block search. Try both on your game. Things to know:
+
+- The first use of a capture size prepares the model for your graphics card, which
+  takes a minute or two. The built-in method runs meanwhile.
+- A generated frame must be ready within its time slot. 30 to 60 and 30 to 90 fit
+  on an RTX 5070; where it does not fit (30 to 120, or a 60 fps game to 120) the
+  built-in method is used and the stats overlay says so.
+- Small still things on top of motion (a crosshair, a minimap) are drawn by the
+  model and can look a little soft. Put a HUD zone over them.
+
+How both methods work is in [Frame generation](frame-generation.md).
+
+## Sound
+
+The card's sound input (the one named after the capture device) is played on the
+default output device. On Windows it arrives about 50 ms after the picture, which
+is the floor for shared audio and below what people notice. If the wrong input is
+picked, set `audio_device` under `[capture]` in `config.toml` to part of the right
+input's name.
+
+## Reading the stats overlay
+
+```
+capture  60.0 fps   render  60.0 fps
+added latency  decode 3.1 + present 4.2 = 7.3 ms
+steadiness     1% low 59.4 fps
+1920x1080 i420 limited bt709  ->  2560x1440 easu  [mailbox]
+gpu ms  yuv 0.11  upscale 0.42  rcas 0.20  grade 0.09  composite 0.08  = 0.90
+Escape close   F1 settings   F3 split   audio 54 ms
+```
+
+| Line | Meaning |
+|---|---|
+| capture / render | frames arriving per second, pictures drawn per second. With built-in frame generation it reads `game 30.0 fps x2 = 60 fps shown` |
+| added latency | time to decode a frame, plus time from handing it to the renderer until it is presented. Display scan-out is not included |
+| steadiness | the rate of the slowest 1% of pictures over the last ten seconds. Close to the render rate means even pacing; well below it means stutter |
+| source -> output | what arrives, the render size, the upscaler and the present mode |
+| gpu ms | GPU time per pass. `n/a` if the graphics card has no timestamp queries |
+| red text | a shader that failed to compile (only when editing shaders) |
+| AI frames: ... | what the AI method is doing |
+| last line | the main keys and the sound's delay |
+
+## Troubleshooting
+
+| What you see | Likely cause | What to do |
+|---|---|---|
+| "No capture devices found" | another program owns the card, or it is unplugged | close OBS / Discord, then **Refresh devices** |
+| "This device offers no MJPEG, NV12 or YUY2 mode" | the card only offers formats CapScale cannot take | use another card or driver |
+| Black picture | HDCP | PS5: Settings > System > HDMI, turn HDCP off |
+| `capture: ... - retrying` in the overlay | the card was unplugged or taken by another program | CapScale retries every second; free the card |
+| Washed out or too dark | wrong range | switch **Range** on the Source tab, then save |
+| Slight colour tint | wrong matrix | switch **Matrix** on the Source tab, then save |
+| No sound, or the wrong sound | the sound input was not matched by name | set `audio_device` under `[capture]` |
+| No dialogue | surround output; the centre channel is dropped | PS5 audio: Linear PCM, stereo |
+| Sound before the picture | frame generation delays the picture | raise **delay ms** on the Audio tab |
+| Sound well after the picture | Bluetooth headphones | use wired or 2.4 GHz headphones |
+| Frame generation looks wrong on a 30 fps game | 120 Hz or VRR output: each frame arrives four times, not two | PS5: turn 120 Hz output and VRR off |
+| Stutter | monitor refresh is not a multiple of the shown rate | 60 on a 120, 180 or 240 Hz display paces evenly |
+| Tearing | *immediate* present mode | use *mailbox* |
+| "AI frames (RIFE)" greyed out | the AI download is not installed | run **CapScale AI setup**, then restart |
+| `AI frames: preparing the model` | first use of this capture size | wait a minute or two |
+| `AI frames: N ms each, too slow for this rate - built-in used` | the model cannot finish a frame in its slot | lower the target, or keep the built-in method |
+| `AI frames: <format> video is not handled - built-in used` | the card delivers YUY2 or 4:2:2 | the AI method takes 4:2:0 only (MJPEG, NV12) |
+| Card falls back to slow, compressed modes | weak USB port or cable | a rear motherboard port and the cable that came with the card |
+| The app does not start from the shortcut | a start-up failure | the error is shown in a message box; from source, run `uv run capscale` in a console to see the full output |

@@ -22,6 +22,7 @@ egui-winit = "0.37"
 bytemuck = { version = "1", features = ["derive"] }
 half = "2"
 pollster = "0.4"
+rfd = "0.18.0"
 
 [dev-dependencies]
 # a stub GPU device, so tests can compile the real shaders without a window

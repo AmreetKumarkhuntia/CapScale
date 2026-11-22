@@ -26,7 +26,6 @@ DEFAULTS: dict = {
         "F6": "toggle:grade",
         "F7": "toggle:lut",
         "F8": "toggle:audio",
-        "F9": "pick_source",
         "F11": "toggle:fullscreen",
     },
 }

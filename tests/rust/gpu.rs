@@ -5,10 +5,8 @@
 use std::path::Path;
 
 use capscale::params::{FrameInfo, Globals, Matrix, Params, Zone};
-use capscale::pipeline::{Pipeline, Step};
-use capscale::shaders::ShaderDir;
+use capscale::render::{Pipeline, ShaderDir, Step, Timing};
 use capscale::source::{Fmt, Plane, Source};
-use capscale::timing::Timing;
 
 const W: u32 = 640;
 const H: u32 = 360;

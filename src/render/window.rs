@@ -2,8 +2,8 @@
 
 use std::collections::VecDeque;
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
-use std::sync::mpsc::{self, Sender};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -14,22 +14,14 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy}
 use winit::keyboard::Key;
 use winit::window::{Fullscreen, Window, WindowId};
 
-use crate::overlay::{Action, Overlay};
+use crate::lut;
 use crate::params::{fit, frame_plan, Backend, FrameInfo, Globals, Params, Vsync};
-use crate::pipeline::{Pipeline, Step, FILES};
-use crate::shaders::ShaderDir;
-use crate::shared::{lock, Event, Shared, Stats, Wake};
-use crate::timing::{Timing, SLOTS};
+use crate::ui::{self, Action, Overlay};
 
-const HOT_RELOAD_EVERY: Duration = Duration::from_millis(250);
-/// Redraws that only the UI asked for wait this long after the previous frame. A mouse
-/// reports movement up to 1000 times a second; without the gap each report would
-/// run the whole pipeline.
-const UI_REDRAW_GAP: Duration = Duration::from_millis(16);
-/// How many picture-to-picture intervals the steadiness figure looks back over.
-const INTERVALS: usize = 600;
-
-type Ready = Sender<Result<Arc<Shared>, String>>;
+use super::types::{
+    lock, App, Event, Gfx, Pipeline, Ready, Settings, ShaderDir, Shared, Stats, Step, Timing, Wake,
+    FILES, HOT_RELOAD_EVERY, INTERVALS, SLOTS, UI_REDRAW_GAP,
+};
 
 /// Start the render thread and wait until its window and GPU pipeline are up.
 pub fn spawn(shader_dir: PathBuf, params: Params) -> Result<Arc<Shared>, String> {
@@ -75,61 +67,27 @@ fn run(shader_dir: PathBuf, params: Params, ready: Ready) {
     }
 }
 
-struct App {
-    init: Option<(PathBuf, Params, Ready)>,
-    proxy: EventLoopProxy<Wake>,
-    gfx: Option<Gfx>,
-}
-
-/// The settings window: egui only, drawn when its UI changes and a few times a second
-/// for the live numbers in it.
-struct Settings {
-    window: Arc<Window>,
-    surface: wgpu::Surface<'static>,
-    config: wgpu::SurfaceConfiguration,
-    overlay: Overlay,
-    /// The UI changed and is waiting for a redraw (see UI_REDRAW_GAP).
-    dirty: bool,
-    last_render: Instant,
-    shown: bool,
-}
-
-struct Gfx {
-    /// The picture window; hidden while not capturing.
-    window: Arc<Window>,
-    /// Whether the picture window is showing.
-    shown: bool,
-    settings: Settings,
-    surface: wgpu::Surface<'static>,
-    config: wgpu::SurfaceConfiguration,
-    present_modes: Vec<wgpu::PresentMode>,
-    shared: Arc<Shared>,
-    pipeline: Pipeline,
-    shaders: ShaderDir,
-    shader_errors: Vec<String>,
-    timing: Timing,
-    overlay: Overlay,
-    source_generation: u64,
-    lut_generation: u64,
-    shown_frame: u64,
-    last_render: Instant,
-    render_fps: f32,
-    last_hot_reload: Instant,
-    fullscreen: bool,
-    cursor_visible: bool,
-    cursor_x: f64,
-    dragging: bool,
-    /// The UI changed and is waiting for a redraw (see UI_REDRAW_GAP).
-    ui_dirty: bool,
-    /// The split divider or the HUD zones are showing, so pointer events matter.
-    interactive: bool,
-    rendered: u64,
-    /// Seconds between the most recent pictures, newest last.
-    intervals: VecDeque<f32>,
-    /// Frame count at the last draw, to tell when a new frame has arrived.
-    converted_frame: u64,
-    /// When the next generated picture is due.
-    next_tick: Option<Instant>,
+/// Ask for a .cube file and load it. Runs on its own thread: the dialog blocks until closed.
+fn pick_lut(shared: &Shared) {
+    static OPEN: AtomicBool = AtomicBool::new(false);
+    if OPEN.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    if let Some(path) = ui::pick_lut() {
+        let path = path.to_string_lossy().into_owned();
+        match lut::load_cube(&path) {
+            Ok(cube) => {
+                lock(&shared.params).lut_path = path;
+                let mut lut = lock(&shared.lut);
+                lut.0 += 1;
+                lut.1 = Some(cube);
+                drop(lut);
+                shared.wake(Wake::Redraw);
+            }
+            Err(e) => ui::show_error(&e),
+        }
+    }
+    OPEN.store(false, Ordering::Release);
 }
 
 fn present_mode(supported: &[wgpu::PresentMode], want: Vsync) -> wgpu::PresentMode {
@@ -314,7 +272,6 @@ impl Gfx {
         }
     }
 
-    /// Recompile shaders saved since the last look.
     fn hot_reload(&mut self) {
         if self.last_hot_reload.elapsed() < HOT_RELOAD_EVERY {
             return;
@@ -333,7 +290,6 @@ impl Gfx {
         }
     }
 
-    /// Move the split-screen divider to the cursor.
     fn drag_divider(&mut self) {
         let (out_w, out_h) = self.pipeline.out_size;
         if out_w == 0 || out_h == 0 {
@@ -431,7 +387,10 @@ impl Gfx {
                 sources.listed = false;
                 lock(&shared.events).push(Event::RefreshSources);
             }
-            Action::PickLut => lock(&shared.events).push(Event::PickLut),
+            Action::PickLut => {
+                let shared = shared.clone();
+                std::thread::spawn(move || pick_lut(&shared));
+            }
             Action::Save => lock(&shared.events).push(Event::Save(params.to_toml())),
             Action::ClearLut => {
                 params.lut_path.clear();
@@ -472,7 +431,6 @@ impl Gfx {
         queue.present(frame);
     }
 
-    /// An event for the settings window.
     fn settings_event(&mut self, el: &ActiveEventLoop, event: WindowEvent) {
         let st = &mut self.settings;
         let (_, repaint) = st.overlay.on_event(&st.window, &event);

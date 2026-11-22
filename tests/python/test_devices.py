@@ -1,4 +1,5 @@
-from capscale.devices import Mode, best_mode, parse_dshow_modes, parse_v4l2_modes
+from capscale.capture.devices import best_mode, parse_dshow_modes, parse_v4l2_modes
+from capscale.capture.types import Mode
 
 DSHOW = (
     'DirectShow video device options (from video devices)\n Pin "Capture" (alternative pin name "0")\n'

@@ -8,6 +8,10 @@ delay.
 - **Rust** (`src/`) owns the window and the GPU pipeline (wgpu, WGSL shaders).
 - **Python** (`python/capscale/`) owns capture, hotkeys and config.
 
+Full documentation is in [docs/](docs/README.md): user guide, configuration
+reference, architecture, render pipeline, frame generation, Python API and
+development.
+
 ## Install
 
 Download `CapScale-Setup-<version>.exe` from the
@@ -86,7 +90,6 @@ sound arrives before the picture. If the wrong input is picked, set
 | F4 | Next upscaler: AMD FSR 1 (EASU), Lanczos-3, bilinear |
 | F5 / F6 / F7 | RCAS / colour grading / LUT on or off |
 | F8 | Mute or unmute game audio |
-| F9 | Show the settings window |
 | F11 | Fullscreen on or off |
 | Esc | Close the picture window (capture stops, settings stay) |
 
@@ -230,6 +233,7 @@ and the error shows in the stats overlay.
 import capscale
 
 r = capscale.Renderer(2560, 1440, fullscreen=True, vsync="mailbox")   # 0, 0 fits the window
+r.toggle_pass("capture", True)    # show the picture window; it is hidden until capture is on
 r.push_frame(array, fmt="nv12", width=1920, height=1080)               # newest frame wins
 r.set_params(sharpness=0.4, exposure=0.0, saturation=1.1,
              lut_path="film.cube", lut_strength=0.6, upscaler="easu")
@@ -247,30 +251,29 @@ that happens. One `Renderer` per process.
 ## Layout
 
 ```
-src/                  Rust: one module per job
-  lib.rs              Python bindings (Renderer)
-  window.rs           render thread: window, surface, frame loop
-  pipeline.rs         the pass chain
-  source.rs           frame upload
-  params.rs           settings, uniform block, colour maths
-  shaders.rs          shader loading and hot reload
-  lut.rs              .cube parser
-  timing.rs           GPU timestamp queries
-  overlay.rs          stats overlay, HUD zones and the settings window
-  shared.rs           state shared between threads
+src/                  Rust: one folder per concern, each with its types in types.rs
+  lib.rs              module list and the Python module
+  render/             window and render thread, pass chain, shader hot reload,
+                      GPU timing, state shared between threads, the Renderer class
+  params/             settings, uniform block, colour maths, frame plan
+  source/             the captured frame as GPU textures, frame upload
+  lut/                .cube parser and 3D texture
+  ui/                 stats overlay, HUD zones, the settings window and native dialogs
 python/capscale/     Python package
   app.py              command line and main loop
-  devices.py          list devices and modes
-  capture.py          open the card, yield frames
+  capture/            where frames come from
+    devices.py          list devices and modes
+    stream.py           open the card, yield frames
+    pattern.py          colour bar generator
+    repeats.py          spot repeated frames (a 30 fps game in a 60 Hz signal)
+    types.py            Mode, Frame
   audio.py            the card's sound to the speakers
-  repeats.py          spot repeated frames (a 30 fps game in a 60 Hz signal)
   ai.py               optional AI frame generation (RIFE)
-  picker.py           LUT file dialog, error messages
   config.py           config.toml load, save, live reload
-  pattern.py          colour bar generator
   shaders/            one WGSL file per pass
 tests/rust/           cargo test
 tests/python/         pytest
+docs/                 full documentation
 ```
 
 ## Build the installer

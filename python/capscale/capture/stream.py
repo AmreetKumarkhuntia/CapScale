@@ -8,6 +8,7 @@ import av
 import numpy as np
 
 from .devices import BACKEND, open_url
+from .types import Frame
 
 RAW = {"nv12": "nv12", "yuyv422": "yuy2"}
 PLANAR = {
@@ -17,8 +18,6 @@ PLANAR = {
 }
 _BT709, _BT601 = (1,), (4, 5, 6)
 _FULL_RANGE = 2
-
-Frame = tuple[object, str, int, int, "bool | None", "str | None", float]
 
 
 class Capture:
@@ -39,7 +38,6 @@ class Capture:
         self.container = av.open(open_url(device), format=BACKEND, options=options)
         self.stream = self.container.streams.video[0]
         self.stream.codec_context.thread_type = "SLICE"
-        self.dropped = 0
 
     def close(self) -> None:
         self.container.close()
@@ -64,7 +62,6 @@ class Capture:
                 continue
             if got - asked < 0.001 and backlog < 4:
                 backlog += 1
-                self.dropped += 1
                 continue
             backlog = 0
 

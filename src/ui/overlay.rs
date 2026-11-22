@@ -1,62 +1,10 @@
-//! UI drawn with egui: the stats overlay and HUD zones on the picture, and the
-//! settings window.
-
 use egui_wgpu::ScreenDescriptor;
 use winit::window::Window;
 
 use crate::params::{Backend, Matrix, Params, Upscaler, Vsync, Zone, MAX_ZONES};
-use crate::shared::{Sources, Stats, PASS_NAMES};
+use crate::render::{Sources, Stats, PASS_NAMES};
 
-/// Something the settings window asked for that it cannot do itself.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Action {
-    None,
-    Start,
-    Stop,
-    Refresh,
-    PickLut,
-    ClearLut,
-    Save,
-}
-
-const OUTPUT_SIZES: [(&str, (u32, u32)); 4] = [
-    ("Fit window", (0, 0)),
-    ("1920 x 1080", (1920, 1080)),
-    ("2560 x 1440", (2560, 1440)),
-    ("3840 x 2160", (3840, 2160)),
-];
-
-/// Capture rates offered on the Source tab, as far as the mode allows.
-const FPS_CHOICES: [u32; 5] = [120, 60, 50, 30, 25];
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Tab {
-    Guide,
-    Source,
-    Output,
-    FrameRate,
-    Picture,
-    Audio,
-}
-
-pub struct Overlay {
-    ctx: egui::Context,
-    state: egui_winit::State,
-    renderer: egui_wgpu::Renderer,
-    jobs: Vec<egui::ClippedPrimitive>,
-    screen: ScreenDescriptor,
-    free: Vec<egui::TextureId>,
-    /// One id per HUD zone for its on-screen frame. egui remembers where a frame was
-    /// dragged by id, so a new zone needs a new id or it would appear where an old one was.
-    zone_ids: Vec<u64>,
-    next_zone_id: u64,
-    /// Where the picture sat in the window when those frames were placed.
-    zone_image: [f32; 4],
-    /// Settings window: the tab showing.
-    tab: Tab,
-    /// The first device list has been seen, and with it whether to open on the guide.
-    tab_chosen: bool,
-}
+use super::types::{Action, Overlay, Tab, FPS_CHOICES, OUTPUT_SIZES};
 
 impl Overlay {
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat, window: &Window) -> Self {
@@ -87,7 +35,6 @@ impl Overlay {
         }
     }
 
-    /// Feed a window event to the UI. Returns (the UI used it, it wants a redraw).
     pub fn on_event(&mut self, window: &Window, event: &winit::event::WindowEvent) -> (bool, bool) {
         let response = self.state.on_window_event(window, event);
         (response.consumed, response.repaint)
@@ -178,7 +125,6 @@ impl Overlay {
         (action, animating)
     }
 
-    /// Draw the prepared UI into the final pass.
     pub fn paint(&mut self, pass: &mut wgpu::RenderPass<'static>) {
         self.renderer.render(pass, &self.jobs, &self.screen);
         for id in self.free.drain(..) {
@@ -406,7 +352,6 @@ fn source_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources) ->
     action
 }
 
-/// The Getting started tab: what the app does and the steps to a first picture.
 fn guide_ui(ui: &mut egui::Ui, tab: &mut Tab) {
     ui.heading("Welcome to CapScale");
     ui.label(
@@ -447,7 +392,6 @@ fn guide_ui(ui: &mut egui::Ui, tab: &mut Tab) {
     }
 }
 
-/// The whole settings window: a row of tabs, the tab's settings, Save at the bottom.
 fn panel_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources, tab: &mut Tab) -> Action {
     let mut action = Action::None;
     egui::Panel::bottom("save").show(ui, |ui| {

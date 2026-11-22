@@ -3,14 +3,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::time::SystemTime;
-
-const COMMON: &str = "common";
-
-pub struct ShaderDir {
-    dir: PathBuf,
-    seen: HashMap<String, Option<SystemTime>>,
-}
+use super::types::{ShaderDir, COMMON};
 
 impl ShaderDir {
     pub fn new(dir: PathBuf) -> Self {

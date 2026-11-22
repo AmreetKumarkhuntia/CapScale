@@ -1,9 +1,9 @@
-from capscale import app, picker
+from capscale import app
 
 
 def test_shortcut_entry_shows_a_start_up_failure_instead_of_losing_it(monkeypatch, tmp_path):
     shown = []
-    monkeypatch.setattr(picker, "show_error", shown.append)
+    monkeypatch.setattr(app, "show_error", shown.append)
     broken = tmp_path / "config.toml"
     broken.write_text("[capture\n")
 

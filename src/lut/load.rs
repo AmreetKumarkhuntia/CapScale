@@ -1,13 +1,4 @@
-//! `.cube` 3D LUT files: parsing, and upload as a 3D texture.
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Cube {
-    /// Edge length N; `data` holds N^3 entries, red changing fastest.
-    pub size: u32,
-    pub domain_min: [f32; 3],
-    pub domain_max: [f32; 3],
-    pub data: Vec<[f32; 3]>,
-}
+use super::Cube;
 
 fn triple<'a>(mut words: impl Iterator<Item = &'a str>, line: usize) -> Result<[f32; 3], String> {
     let mut out = [0.0; 3];
@@ -65,44 +56,4 @@ pub fn parse_cube(text: &str) -> Result<Cube, String> {
 pub fn load_cube(path: &str) -> Result<Cube, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
     parse_cube(&text).map_err(|e| format!("{path}: {e}"))
-}
-
-pub fn to_texture(device: &wgpu::Device, queue: &wgpu::Queue, cube: &Cube) -> wgpu::TextureView {
-    let n = cube.size;
-    let texels: Vec<[u16; 4]> = cube
-        .data
-        .iter()
-        .map(|c| [c[0], c[1], c[2], 1.0].map(|v| half::f16::from_f32(v).to_bits()))
-        .collect();
-    let size = wgpu::Extent3d {
-        width: n,
-        height: n,
-        depth_or_array_layers: n,
-    };
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("lut"),
-        size,
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D3,
-        format: wgpu::TextureFormat::Rgba16Float,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-        view_formats: &[],
-    });
-    queue.write_texture(
-        wgpu::TexelCopyTextureInfo {
-            texture: &texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        bytemuck::cast_slice(&texels),
-        wgpu::TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(n * 8),
-            rows_per_image: Some(n),
-        },
-        size,
-    );
-    texture.create_view(&Default::default())
 }

@@ -6,42 +6,12 @@
 
 use crate::lut::{self, Cube};
 use crate::params::{Globals, Params, Upscaler};
-use crate::shaders::ShaderDir;
-use crate::timing::Timing;
 
-/// Shader file names, without `.wgsl`. Indices are used throughout this module.
-pub const FILES: [&str; 11] = [
-    "yuv2rgb",
-    "bilinear",
-    "lanczos3",
-    "easu",
-    "rcas",
-    "grade",
-    "lut3d",
-    "composite",
-    "luma",
-    "flow",
-    "interp",
-];
-const YUV: usize = 0;
-const BILINEAR: usize = 1;
-const LANCZOS3: usize = 2;
-const EASU: usize = 3;
-const RCAS: usize = 4;
-const GRADE: usize = 5;
-const LUT: usize = 6;
-const COMPOSITE: usize = 7;
-const LUMA: usize = 8;
-const FLOW: usize = 9;
-const INTERP: usize = 10;
-
-/// Timing slots, in the order of `shared::PASS_NAMES`.
-const SLOT_YUV: usize = 0;
-const SLOT_FRAMEGEN: usize = 1;
-const SLOT_UPSCALE: usize = 2;
-const SLOT_RCAS: usize = 3;
-const SLOT_GRADE: usize = 4;
-const SLOT_LUT: usize = 5;
+use super::types::{
+    Chain, Composite, Gen, Pipeline, ShaderDir, Step, Timing, BILINEAR, COMPOSITE, EASU, FILES, FLOW,
+    GRADE, INTERMEDIATE, INTERP, LANCZOS3, LUMA, LUT, RCAS, SLOT_FRAMEGEN, SLOT_GRADE, SLOT_LUT,
+    SLOT_RCAS, SLOT_UPSCALE, SLOT_YUV, YUV,
+};
 
 /// Depth of the brightness pyramid motion is searched on: enough halvings to bring
 /// the picture down to about 40 pixels wide (5 levels for 1080p). The smallest level
@@ -49,83 +19,6 @@ const SLOT_LUT: usize = 5;
 /// two content frames. Smaller than that and there is too little picture to match.
 fn pyramid_levels(width: u32) -> usize {
     ((width.max(1) as f32 / 40.0).log2().floor() as usize).clamp(2, 6)
-}
-
-const INTERMEDIATE: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
-
-/// What one draw should do.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Step {
-    /// A frame arrived since the last draw: convert it and keep the one before.
-    pub new_frame: bool,
-    /// Frame generation is switched on (whether or not this draw shows a generated frame).
-    pub generating: bool,
-    /// Show a generated picture at this point between the two newest frames
-    /// (0 = older, 1 = newer). None shows the newest frame as it is.
-    pub phase: Option<f32>,
-}
-
-/// Which bind group the composite pass reads; handed back by `encode`.
-#[derive(Clone, Copy, Debug)]
-pub struct Composite {
-    frame: usize,
-    in_a: bool,
-}
-
-/// Targets and bind groups for frame generation.
-struct Gen {
-    /// Brightness pyramids of the two newest frames: `[frame][level]`, level 0 = half size.
-    luma: [Vec<wgpu::TextureView>; 2],
-    /// Motion per pyramid level.
-    flow: Vec<wgpu::TextureView>,
-    /// The generated picture, at capture size.
-    mid: wgpu::TextureView,
-    bg_luma: [Vec<wgpu::BindGroup>; 2],
-    /// `[newest frame][level]`: older luma, newer luma, motion from the level above.
-    bg_flow: [Vec<wgpu::BindGroup>; 2],
-    /// `[newest frame]`: older frame, newer frame, finest motion.
-    bg_interp: [wgpu::BindGroup; 2],
-    bg_mid: wgpu::BindGroup,
-}
-
-/// Targets and bind groups that exist once a frame size is known.
-struct Chain {
-    /// The two newest converted frames; `Pipeline::newest` says which is which.
-    rgb: [wgpu::TextureView; 2],
-    a: wgpu::TextureView,
-    b: wgpu::TextureView,
-    bg_src: wgpu::BindGroup,
-    bg_rgb: [wgpu::BindGroup; 2],
-    bg_a: wgpu::BindGroup,
-    bg_b: wgpu::BindGroup,
-    /// `[frame shown as "before"][processed image is in a / b]`
-    bg_comp: [[wgpu::BindGroup; 2]; 2],
-    gen: Gen,
-}
-
-pub struct Pipeline {
-    surface_format: wgpu::TextureFormat,
-    globals_buf: wgpu::Buffer,
-    globals_bg: wgpu::BindGroup,
-    tex_layout: wgpu::BindGroupLayout,
-    layout: wgpu::PipelineLayout,
-    sampler: wgpu::Sampler,
-    dummy_2d: wgpu::TextureView,
-    dummy_3d: wgpu::TextureView,
-    pipelines: Vec<wgpu::RenderPipeline>,
-    src_views: Vec<wgpu::TextureView>,
-    pub src_size: (u32, u32),
-    pub out_size: (u32, u32),
-    lut: Option<wgpu::TextureView>,
-    /// Edge length and input domain of the loaded LUT.
-    pub lut_info: Option<(u32, [f32; 3], [f32; 3])>,
-    chain: Option<Chain>,
-    /// Index into `Chain::rgb` of the newest frame.
-    newest: usize,
-    /// Frames converted since the targets were last rebuilt; generation needs two.
-    converted: u64,
-    /// Whether each frame's brightness pyramid matches what is in `rgb`.
-    luma_ready: [bool; 2],
 }
 
 fn target(device: &wgpu::Device, label: &str, (width, height): (u32, u32)) -> wgpu::TextureView {
@@ -579,7 +472,6 @@ impl Pipeline {
         })
     }
 
-    /// Draw the composite into an open pass on the swapchain.
     pub fn draw_composite(&self, pass: &mut wgpu::RenderPass<'_>, which: Composite) {
         let Some(chain) = &self.chain else { return };
         pass.set_pipeline(&self.pipelines[COMPOSITE]);

@@ -1,7 +1,6 @@
 use std::path::Path;
 
-use capscale::pipeline::{Pipeline, FILES};
-use capscale::shaders::ShaderDir;
+use capscale::render::{Pipeline, ShaderDir, FILES};
 
 fn noop_device() -> wgpu::Device {
     wgpu::Device::noop(&Default::default()).0

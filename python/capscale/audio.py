@@ -56,8 +56,6 @@ class Audio:
                 f"no sound input matching {device or video_device!r}; set device in [audio] of config.toml"
             )
         self.volume, self.delay_ms, self.muted = 1.0, 0.0, False
-        self.glitches = 0
-        self.peak = 0.0
         self._delay = DelayLine(CHANNELS, RATE * MAX_DELAY_MS // 1000 + RATE // 4)
         self.stream = sd.Stream(
             device=found,
@@ -71,9 +69,6 @@ class Audio:
         self.stream.start()
 
     def _callback(self, indata, outdata, frames, time, status) -> None:
-        if status:
-            self.glitches += 1
-        self.peak = max(self.peak * 0.9, float(np.abs(indata).max()))
         delay = int(min(max(self.delay_ms, 0.0), MAX_DELAY_MS) * RATE / 1000)
         outdata[:] = self._delay.process(indata, delay) * (0.0 if self.muted else self.volume)
 

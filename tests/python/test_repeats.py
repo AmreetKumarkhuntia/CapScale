@@ -2,8 +2,8 @@ import random
 
 import numpy as np
 
-from capscale.pattern import Pattern
-from capscale.repeats import Cadence, luma_of
+from capscale.capture.pattern import Pattern
+from capscale.capture.repeats import Cadence, luma_of
 
 
 def run(cadence: Cadence, changes, forced=None) -> list[bool]:
