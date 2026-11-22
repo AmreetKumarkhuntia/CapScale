@@ -371,8 +371,8 @@ fn guide_ui(ui: &mut egui::Ui, tab: &mut Tab) {
     ui.add_space(8.0);
     ui.strong("Making it look better");
     for (name, what) in [
-        ("Picture", "the upscaler, sharpening, colour grading and a .cube LUT."),
-        ("Frame rate", "generates in-between frames, for example a 30 fps game to 60. Built in, or AI (RIFE): fastest on an NVIDIA RTX card, slower on others."),
+        ("Picture", "the upscaler (and NVIDIA's AI upscaler on an RTX card), sharpening, colour grading and a .cube LUT."),
+        ("Frame rate", "generates in-between frames, for example a 30 fps game to 60. Built in, or an AI model: RIFE on any card, NVIDIA's own on an RTX card."),
         ("Output", "window size, vsync and the stats overlay."),
         ("Audio", "plays the game's sound; move the delay slider if sound comes before the picture."),
     ] {
@@ -468,12 +468,26 @@ fn panel_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources, tab
                         ui.selectable_value(&mut p.target_fps, fps, format!("{fps:.0}"));
                     }
                 });
-                ui.add_enabled_ui(p.ai_available, |ui| {
-                    ui.checkbox(&mut p.ai_framegen, "AI frames (RIFE)")
-                        .on_hover_text("On: generated frames come from the RIFE model. Off: the built-in method.")
-                        .on_disabled_hover_text("Not installed. Run CapScale AI setup from the Start menu, then restart.");
+                let models = p.ai_models.clone();
+                let by_ai = p.ai_framegen && !models.is_empty();
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Method");
+                    if ui.selectable_label(!by_ai, "Built-in").clicked() {
+                        p.ai_framegen = false;
+                    }
+                    if models.is_empty() {
+                        ui.add_enabled(false, egui::Button::selectable(false, "AI"))
+                            .on_disabled_hover_text("Not installed. Run CapScale AI setup from the Start menu, then restart.");
+                    }
+                    let chosen = models.iter().position(|m| m.0 == p.ai_model).unwrap_or(0);
+                    for (i, (name, label)) in models.iter().enumerate() {
+                        if ui.selectable_label(by_ai && i == chosen, label).clicked() {
+                            p.ai_framegen = true;
+                            p.ai_model = name.clone();
+                        }
+                    }
                 });
-                ui.add_enabled_ui(p.ai_available && p.ai_framegen, |ui| {
+                ui.add_enabled_ui(by_ai, |ui| {
                     ui.checkbox(&mut p.ai_still, "AI: leave still areas untouched")
                         .on_hover_text("On: where nothing moves, a generated frame shows the real picture. Off: the model draws everything.");
                 });
@@ -530,6 +544,24 @@ fn panel_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources, tab
                         for u in Upscaler::ALL {
                             ui.selectable_value(&mut p.upscaler, u, u.label());
                         }
+                    });
+                    let upscalers = p.ai_upscalers.clone();
+                    ui.add_enabled_ui(!upscalers.is_empty(), |ui| {
+                        let current = upscalers
+                            .iter()
+                            .find(|u| u.0 == p.ai_upscale)
+                            .map_or("off", |u| u.1.as_str());
+                        egui::ComboBox::from_label("AI upscale first (NVIDIA RTX)")
+                            .selected_text(current)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut p.ai_upscale, String::new(), "off");
+                                for (name, label) in &upscalers {
+                                    ui.selectable_value(&mut p.ai_upscale, name.clone(), label.as_str());
+                                }
+                            })
+                            .response
+                            .on_hover_text("NVIDIA's video upscaler enlarges each frame to the size shown and cleans up compression noise, before the steps here. Higher levels take longer.")
+                            .on_disabled_hover_text("Needs an NVIDIA RTX card and CapScale AI setup from the Start menu.");
                     });
                     ui.checkbox(&mut p.rcas, "AMD FSR 1 sharpening (RCAS)");
                     slider(ui, &mut p.sharpness, 0.0..=2.0, "sharpness (0 = sharpest)");

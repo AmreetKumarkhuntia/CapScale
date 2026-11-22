@@ -18,8 +18,9 @@ job for Python. The boundary between them is one class, `Renderer`
 ```mermaid
 flowchart LR
     card[Capture card] -->|PyAV| pump["capture thread<br>(_Pump)"]
-    pump -->|push_frame| src[("Source<br>GPU textures")]
-    pump -->|submit| ai["ai thread<br>(FrameGen)"]
+    pump -->|submit| up["upscale thread<br>(ai.Upscale, optional)"]
+    up -->|push_frame| src[("Source<br>GPU textures")]
+    up -->|submit| ai["ai thread<br>(FrameGen)"]
     ai -->|push_frame| src
     src --> render["capscale-render thread<br>pass chain"]
     render --> pic[Picture window]
@@ -33,8 +34,9 @@ flowchart LR
 | Thread | Started by | Does |
 |---|---|---|
 | main | the process | `app.main`: every 20 ms it hands frame generation settings to the capture thread and sound settings to the audio stream, handles window events and hotkeys, reloads `config.toml`, restarts a dead capture thread |
-| `capture` | `app._Pump` | opens the card, reads frames, drops repeated frames when frame generation is on, hands each frame to the renderer or to the AI thread |
-| `ai` | `ai.FrameGen`, only if the AI download is installed | loads the model, generates in-between frames, pushes them and the real frame at their times |
+| `capture` | `app._Pump` | opens the card, reads frames, drops repeated frames when frame generation is on, hands each frame on: to the upscale thread if there is one, and from there (`_Pump._show`) to the AI thread or the renderer |
+| `ai` | `ai.FrameGen`, only if the AI download is installed | loads the chosen model, generates in-between frames, pushes them and the real frame at their times |
+| `upscale` | `ai.Upscale`, only if NVIDIA's models are installed | with an AI upscaler chosen, enlarges each captured frame before it goes to the AI thread or the renderer; otherwise frames pass it by |
 | `capscale-render` | `Renderer()` (`render::window::spawn`) | the winit event loop: both windows, the pass chain, the egui UI, shader hot reload |
 | PortAudio callback | `audio.Audio` | copies the card's sound to the output through a delay line |
 | LUT dialog | "Load .cube..." | a native file dialog blocks its caller, so it gets its own short-lived thread |
@@ -71,7 +73,7 @@ the render thread. Each field has its own mutex and is locked only for a copy.
 | Field | Written by | Read by |
 |---|---|---|
 | `source` | `push_frame` | render thread, each draw |
-| `params` | `set_params`, `toggle_pass`, both windows' UI | render thread; Python through the `framegen`, `audio`, `hud_zones`, `ai_still` getters |
+| `params` | `set_params`, `toggle_pass`, both windows' UI | render thread; Python through the `framegen`, `audio`, `hud_zones`, `ai_still`, `ai_model`, `ai_upscale` getters |
 | `lut` | `set_params(lut_path=...)`, the LUT dialog | render thread, which uploads it when its generation number moves |
 | `stats` | render thread | UI, `Renderer.stats` |
 | `events` | render thread | `Renderer.poll_events` |

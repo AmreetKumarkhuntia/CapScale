@@ -1,7 +1,7 @@
 # Frame generation
 
 Showing a 30 fps game at 60, 90 or 120 by generating the pictures in between.
-There are two methods, a built-in one in shaders and an optional AI model, and
+There are two methods, a built-in one in shaders and optional AI models, and
 they share the first two steps.
 
 ## The problem
@@ -146,10 +146,11 @@ the second.
 ## The AI method
 
 The open-source [RIFE](https://github.com/hzwer/Practical-RIFE) model
-(`rife_v4.15_lite`), run through ONNX Runtime. It is not part
-of the app; `scripts/install-ai.ps1` puts it in `%LOCALAPPDATA%\CapScale\ai`.
-`ai.available()` is true when a model file and ONNX Runtime are there, and only
-then is the switch in the settings window enabled.
+(`rife_v4.15_lite`), run through ONNX Runtime, or on an NVIDIA RTX card one of
+[NVIDIA's own](#nvidias-models). None is part of the app; `scripts/install-ai.ps1`
+puts them in `%LOCALAPPDATA%\CapScale\ai`. `ai.frame_models()` lists what is there,
+and the settings window's **Method** row offers exactly that; the choice is
+`ai_model` in `config.toml`, and it can be changed while the app runs.
 
 ### Engines and models
 
@@ -169,9 +170,35 @@ card has been timed. `-Runtime nvidia` or `-Runtime directml` on the script
 overrides the choice.
 
 **The model** is any `.onnx` file in the pack that has the inputs and outputs
-below; its name is the file name. `[ai] model` in `config.toml` names the one to
-use, and empty means the first. Adding either is covered in
+below; its name is the file name. Adding either is covered in
 [Development](development.md#adding-an-engine-or-a-model).
+
+### NVIDIA's models
+
+`ai/nvidia.py`. NVIDIA publishes its video frame generation as the `nvidia-vfx`
+package; `install-ai.ps1` adds it, and CuPy, on an NVIDIA RTX card (it needs driver
+570.65 or newer). It is not an ONNX file and does not go through the engines above:
+`FrameGenerator` follows the same `FrameModel` shape as `ai.Model`, so `FrameGen`
+treats the two alike.
+
+| Name | One generated 1080p frame on an RTX 5070 |
+|---|---|
+| `nvidia-low` | 3 ms |
+| `nvidia-medium` | 5 ms |
+| `nvidia-high` | 18 ms: over the 16.7 ms slot of 30 to 60, so on this card the built-in method is used instead |
+
+With an [AI upscaler](pipeline.md#ai-upscaling-ahead-of-the-passes) chosen, the frames
+arrive already enlarged and are generated at that size, which costs more than twice
+as much at 1440p: `nvidia-low` 7 ms, `nvidia-medium` 12 ms. Fed real 1080p frames at
+the real pace on an RTX 5070, both held 30 to 60 beside the heaviest upscale level, and
+Low held 30 to 120 beside `nvidia-high`; Medium has the less room to spare.
+
+A frame's planes are copied to the card, turned into RGB by a kernel there, given to
+the model, and turned back; those times include all of it. The planes are always
+read as full range: nothing can be clipped on the way to RGB, and the way back
+restores every value, so the picture leaves in the range it came in. Still areas are
+kept as the real frame by the same rule as the RIFE wrapper below, done on the card.
+On a scene cut NVIDIA's models give a real frame, where RIFE blends the two shots.
 
 ### The model takes the card's frames directly
 
@@ -197,14 +224,16 @@ switches this off and the model draws everything.
 ### `ai.Model`
 
 One ONNX Runtime session for one model and one frame size, opened by
-`engines.session`. TensorRT builds an engine for the
+`engines.session`. `ai.frame_model(width, height, name)` makes this or NVIDIA's
+`FrameGenerator`, whichever the name belongs to. TensorRT builds an engine for the
 graphics card the first time a size is used, which takes a minute or two; it is
 kept in `ai\engines`. The model is run a few times on load to time it
 (`Model.took`), and that figure is kept up to date while it runs.
 
 ### `ai.FrameGen`: the AI thread
 
-The capture thread calls `submit` for each game frame. It returns `False`, and the
+The capture thread calls `submit` for each game frame. When the frame size or the
+chosen model changes, the thread loads the new one. `submit` returns `False`, and the
 caller shows the frame itself so the built-in method takes over, when:
 
 | Reason | Status line |
@@ -231,14 +260,14 @@ is added to its `decode_ms`, so the overlay's latency figure stays true.
 
 ## Which to use
 
-| | Built-in | AI (RIFE) |
-|---|---|---|
-| Needs | any supported graphics card | a download: 4 GB for NVIDIA RTX, 150 MB for other cards |
-| Extra delay at 30 to 60 | about 17 ms | about 28 ms (RTX 5070 with TensorRT, 1080p) |
-| Cost per generated frame | under 1 ms of GPU | 10 to 12 ms with TensorRT, about 33 ms with DirectML (RTX 5070, 1080p) |
-| Rates it can reach | any multiple up to 8x | as far as a frame fits its slot. On an RTX 5070: 30 to 60 and 30 to 90 at 1080p with TensorRT; 30 to 60 at 720p with DirectML |
-| Video it takes | everything the renderer takes | 4:2:0 only (MJPEG, NV12) |
-| Weak spots | small objects against a moving background; a thin strip at the edges during a pan | small still things on top of motion look a little soft |
+| | Built-in | AI (RIFE) | AI (NVIDIA) |
+|---|---|---|---|
+| Needs | any supported graphics card | a download: 4.6 GB for NVIDIA RTX, 150 MB for other cards | an NVIDIA RTX card and the same download |
+| Extra delay at 30 to 60 | about 17 ms | about 28 ms (RTX 5070 with TensorRT, 1080p) | 17 ms plus the frame's cost |
+| Cost per generated frame | under 1 ms of GPU | 10 to 12 ms with TensorRT, about 33 ms with DirectML (RTX 5070, 1080p) | Low 3 ms, Medium 5 ms, High 18 ms (RTX 5070, 1080p) |
+| Rates it can reach | any multiple up to 8x | as far as a frame fits its slot. On an RTX 5070: 30 to 60 and 30 to 90 at 1080p with TensorRT; 30 to 60 at 720p with DirectML | Low and Medium: up to 120 from a 30 or a 60 fps game by their time per frame; High: none at 1080p on an RTX 5070 (18 ms against a 16.7 ms slot) |
+| Video it takes | everything the renderer takes | 4:2:0 only (MJPEG, NV12) | 4:2:0 only |
+| Weak spots | small objects against a moving background; a thin strip at the edges during a pan | small still things on top of motion look a little soft | not yet judged on real play |
 
 Try both on your game.
 
@@ -250,4 +279,4 @@ Try both on your game.
 | `cargo test` | the built-in method on the real GPU against a scene with known motion: generated frames follow the motion, overlays stay steady under noise, a HUD zone shows the real frame |
 | `uv run pytest tests/python/test_repeats.py` | repeat detection, including noise and rhythm slips |
 | `uv run pytest tests/python/test_ai.py` | the AI thread's timing and fallbacks with a stand-in model, the choice of engine and model, and the real model where it is installed |
-| `uv run python -m capscale.ai [WIDTHxHEIGHT] [MODEL]` | loads the real model, says which engine runs it, times it, and scores its output on a picture that moves by a known amount |
+| `uv run python -m capscale.ai [WIDTHxHEIGHT] [MODEL]` | loads the real model (an ONNX one or `nvidia-low`, `nvidia-medium`, `nvidia-high`), says what runs it, times it, and scores its output on a picture that moves by a known amount |

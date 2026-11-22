@@ -22,7 +22,7 @@ Start menu, plus the Desktop if you tick it.
 On the options page:
 
 - **Create a desktop shortcut**
-- **Download AI frame generation** (off by default; about 4 GB for an NVIDIA RTX card,
+- **Download AI frame generation** (off by default; about 4.6 GB for an NVIDIA RTX card,
   about 150 MB for any other).
   A window shows the download; press Enter when it says it is done. You can add it
   later with **CapScale AI setup** in the Start menu.
@@ -142,10 +142,11 @@ method is motion interpolation done in shaders here (`luma.wgsl`, `flow.wgsl`,
 In `config.toml` these are `content_fps` (0 = auto) and `target_fps` (0 = off)
 under `[params]`.
 
-**AI method (optional).** The **AI frames (RIFE)** switch replaces the built-in
-method with the open-source [RIFE](https://github.com/hzwer/Practical-RIFE) model, run on the
-graphics card. It is a neural network trained on real video, where the built-in
-method is a block search; try both on your game. It is not part of the app; install
+**AI method (optional).** **Method** on the Frame rate tab replaces the built-in
+method with an AI model, run on the graphics card: the open-source
+[RIFE](https://github.com/hzwer/Practical-RIFE), or on an NVIDIA RTX card one of NVIDIA's
+own three (Low, Medium, High). They are neural networks trained on real video, where the
+built-in method is a block search; try them on your game. They are not part of the app; install
 it once by ticking **Download AI frame generation** in the installer, or later from
 the **CapScale AI setup** Start-menu entry. From source, run
 
@@ -155,11 +156,11 @@ scripts\install-ai.ps1
 
 Either way it looks at the graphics card and puts the model and one of two runtimes in
 `%LOCALAPPDATA%\CapScale\ai`. Delete that folder to remove it. Until it is installed
-the switch is greyed out.
+only the built-in method can be chosen.
 
 | Graphics card | Runtime | Download | One generated frame |
 |---|---|---|---|
-| NVIDIA RTX | ONNX Runtime with NVIDIA's CUDA and TensorRT | about 4 GB | 10 to 12 ms at 1080p (RTX 5070) |
+| NVIDIA RTX | ONNX Runtime with NVIDIA's CUDA and TensorRT, and NVIDIA's video models (`nvidia-vfx`) | about 4.6 GB | RIFE 10 to 12 ms; NVIDIA Low 3 ms, Medium 5 ms, High 18 ms (too slow for 30 to 60 on this card). At 1080p on an RTX 5070 |
 | any other DirectX 12 card (AMD, Intel, older NVIDIA) | ONNX Runtime with DirectML | about 150 MB | about 33 ms at 1080p, 13 ms at 720p. Measured on the same RTX 5070; no AMD or Intel card has been timed |
 
 - With TensorRT on an RTX 5070 a real frame is shown about 28 ms late at 30 to 60,
@@ -179,9 +180,18 @@ the switch is greyed out.
 - It handles the 4:2:0 video a capture card normally gives (MJPEG, NV12).
   `uv run python -m capscale.ai` times it and checks its output.
 
-In `config.toml` these are `ai_framegen` and `ai_still` under `[params]`; `model` under
-`[ai]` picks between installed models. Engines and models are both tables that can be
-added to: see [Development](docs/development.md#adding-an-engine-or-a-model).
+In `config.toml` these are `ai_framegen`, `ai_model` and `ai_still` under `[params]`.
+Engines and models are both tables that can be added to: see
+[Development](docs/development.md#adding-an-engine-or-a-model).
+
+**AI upscaling (optional, NVIDIA RTX).** **AI upscale first** on the Picture tab hands
+each frame to NVIDIA's video upscaler before the steps above: it enlarges the frame to
+the size shown and removes compression noise as it does, which suits a card that sends
+MJPEG. Seven levels, from Low (4 ms a frame for 1080p to 1440p on an RTX 5070) to
+Streaming Ultra (11 ms); it comes with the same download. Each of the game's real
+frames goes through it, and frame generation then works on the enlarged frames. A
+level has to fit the rate: where it does not, the app's own upscaler is used and the
+stats overlay says so. In `config.toml` it is `ai_upscale` under `[params]`.
 
 **HUD zones.** A minimap that turns over a moving road cannot be interpolated
 cleanly. On the Frame rate tab, "+ box" or "+ circle" adds a zone; tick "Show
@@ -281,7 +291,7 @@ python/capscale/     Python package
     repeats.py          spot repeated frames (a 30 fps game in a 60 Hz signal)
     types.py            Mode, Frame
   audio.py            the card's sound to the speakers
-  ai/                 optional AI frame generation (RIFE)
+  ai/                 optional AI frame generation and AI upscaling
     engines.py          how a model runs on the card: TensorRT, DirectML
     pack.py             the AI download and the models in it
     model.py            one model for one frame size

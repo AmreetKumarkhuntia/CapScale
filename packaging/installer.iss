@@ -32,7 +32,7 @@ InfoAfterFile=getting-started.txt
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"
-Name: "aiframes"; Description: "Download AI frame generation (NVIDIA RTX: about 4 GB; other cards: about 150 MB, slower)"; Flags: unchecked
+Name: "aiframes"; Description: "Download AI frame generation (NVIDIA RTX: about 4.6 GB; other cards: about 150 MB, slower)"; Flags: unchecked
 
 [Files]
 Source: "..\dist\CapScale\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion

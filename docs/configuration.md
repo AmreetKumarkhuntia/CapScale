@@ -27,8 +27,7 @@ checked every 20 ms.
 
 - `[output]`, `[params]`, `[passes]`, `[audio]` and `[hotkeys]` take effect at once.
 - A change to `[capture]` restarts capture, if it is running and `device` is set.
-- `backend` is only read when the window is created, and `[ai]` when the app starts:
-  they apply at the next start.
+- `backend` is only read when the window is created: it applies at the next start.
 - A file that does not parse, an unknown section, or a wrong key or value is
   reported on stderr as `config: ...` and that reload is skipped; the app keeps
   running on the previous values.
@@ -87,8 +86,10 @@ Values outside the range are clamped, not rejected.
 | `content_fps` | `0.0` | 0 to 240 | the game's own rate. 0 measures it |
 | `target_fps` | `0.0` | 0 to 480 | generate frames up to this rate. 0 is off |
 | `hud_zones` | `[]` | up to 8 | areas kept out of frame generation: `[left, top, right, bottom]` as fractions of the picture, with an optional fifth number, non-zero for an ellipse |
-| `ai_framegen` | `false` | | `true`: frames from the AI model; `false`: the built-in method |
+| `ai_framegen` | `false` | | `true`: frames from an AI model; `false`: the built-in method |
+| `ai_model` | `""` | an installed model | which AI model makes the frames: a file in `%LOCALAPPDATA%\CapScale\ai` without its `.onnx`, or `nvidia-low`, `nvidia-medium`, `nvidia-high` on an NVIDIA RTX card. Empty: the first one installed |
 | `ai_still` | `true` | | AI method: still areas are left as the real picture |
+| `ai_upscale` | `""` | an installed upscaler | AI upscaling ahead of the passes, NVIDIA RTX only: `nvidia-low`, `nvidia-medium`, `nvidia-high`, `nvidia-ultra`, `nvidia-highbitrate-high`, `nvidia-highbitrate-ultra` or `nvidia-streaming-ultra`. Empty: off. See [Render pipeline](pipeline.md#ai-upscaling-ahead-of-the-passes) |
 | `full_range` | left out | `true`, `false` | brightness range of the video. Left out: trust what the card reports |
 | `matrix` | left out | `"bt601"`, `"bt709"`, `"auto"` | colour standard. Left out or `auto`: what the card reports, else BT.709 from 720 lines up and BT.601 below |
 
@@ -116,9 +117,7 @@ Values outside the range are clamped, not rejected.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `model` | `""` | which installed AI model to use: the name of a file in `%LOCALAPPDATA%\CapScale\ai`, without `.onnx`. Empty: the first one there |
-
-Read at start. See [Frame generation](frame-generation.md#engines-and-models).
+| `model` | `""` | where the choice of AI model was kept before the settings window had it. Still read, when `ai_model` under `[params]` is absent |
 
 ### `[hotkeys]`
 

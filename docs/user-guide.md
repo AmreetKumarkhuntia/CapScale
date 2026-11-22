@@ -6,7 +6,7 @@
 - A capture card that offers MJPEG, NV12 or YUY2 video. Raw NV12 or YUY2 gives less
   delay and a cleaner picture than MJPEG.
 - A graphics card with DirectX 12 or Vulkan.
-- For the optional AI frame generation: an NVIDIA RTX card and about 4 GB of disk for
+- For the optional AI frame generation: an NVIDIA RTX card and about 4.6 GB of disk for
   the fastest runtime. Any other DirectX 12 card (AMD, Intel) gets a slower one of
   about 150 MB.
 
@@ -21,7 +21,7 @@ Options on the installer's task page:
 | Option | Default | Does |
 |---|---|---|
 | Create a desktop shortcut | on | adds CapScale to the Desktop (it is always in the Start menu) |
-| Download AI frame generation | off | fetches the AI runtime for your graphics card (about 4 GB for NVIDIA RTX, about 150 MB otherwise); a console window shows the download, press Enter when it says it is done |
+| Download AI frame generation | off | fetches the AI runtime for your graphics card (about 4.6 GB for NVIDIA RTX, about 150 MB otherwise); a console window shows the download, press Enter when it says it is done |
 
 The AI download can be added later from **CapScale AI setup** in the Start menu.
 
@@ -91,6 +91,7 @@ See [Frame rate](#frame-rate-1) below.
 |---|---|
 | Noise reduction, strength | for a card that sends MJPEG: removes the compression speckle before the picture is enlarged and sharpened, which would otherwise make it stand out. Higher is smoother; too high and fine texture goes flat |
 | Upscaler: AMD FSR 1 / Lanczos-3 / Bilinear | how the picture is enlarged. With the box unticked it is plain bilinear |
+| AI upscale first (NVIDIA RTX): off / Low ... Streaming Ultra | NVIDIA's video upscaler enlarges each frame to the size shown, and cleans up compression noise, before the other steps. Higher levels take longer per frame. Needs the AI download on an NVIDIA RTX card. With it on, try the noise reduction off: the two do the same job |
 | AMD FSR 1 sharpening (RCAS), sharpness | **0 is the sharpest**; each +1 halves the effect, up to 2 |
 | Colour grading | exposure (stops), contrast, saturation, vibrance, temperature, tint, gamma, lift, lgg gamma, gain |
 | Apply 3D LUT, Load .cube..., Clear, strength | a look-up table in `.cube` format (3D only), blended by strength |
@@ -131,7 +132,7 @@ arrives twice. This tab turns those repeats into generated in-between frames.
 |---|---|
 | Current (game): auto / 30 / 60 | the game's own rate. *auto* measures it from the repeated frames |
 | Target: off / 60 / 90 / 120 / 180 | the rate to show. *off* shows frames as they arrive |
-| AI frames (RIFE) | use the AI model instead of the built-in method. Greyed out until the AI download is installed |
+| Method: Built-in / an AI model | what makes the in-between frames. The AI models appear once the AI download is installed: RIFE on any card, and NVIDIA Low, Medium and High on an NVIDIA RTX card |
 | AI: leave still areas untouched | where nothing moves, a generated frame is the real picture |
 | HUD zones: + box, + circle, remove last | areas kept out of frame generation |
 | Show and move zones | draws the zones as red outlines on the picture so they can be dragged and resized |
@@ -139,8 +140,9 @@ arrives twice. This tab turns those repeats into generated in-between frames.
 Only whole multiples are generated: a target of 100 on a 30 fps game gives 90.
 
 **What it costs.** A real frame waits while the generated frames before it are
-shown: about 17 ms for 30 to 60, about 25 ms for 30 to 120. The AI method adds the
-time one generated frame takes (10 to 12 ms for 1080p on an RTX 5070). The line at
+shown: about 17 ms for 30 to 60, about 25 ms for 30 to 120. An AI model adds the
+time one generated frame takes (at 1080p on an RTX 5070: RIFE 10 to 12 ms, NVIDIA Low
+3 ms, Medium 5 ms, High 18 ms). The line at
 the bottom of the tab and the stats overlay show the real figures.
 
 **What to expect.** Camera pans and a still HUD are handled well. A small object
@@ -157,9 +159,13 @@ is a block search. Try both on your game. Things to know:
 
 - On an NVIDIA RTX card, the first use of a capture size prepares the model for it, which
   takes a minute or two. The built-in method runs meanwhile.
-- A generated frame must be ready within its time slot. 30 to 60 and 30 to 90 fit
-  on an RTX 5070; where it does not fit (30 to 120, or a 60 fps game to 120) the
-  built-in method is used and the stats overlay says so.
+- A generated frame must be ready within its time slot. With RIFE, 30 to 60 and 30 to 90
+  fit on an RTX 5070; where it does not fit (30 to 120, or a 60 fps game to 120) the
+  built-in method is used and the stats overlay says so. NVIDIA Low and Medium are quick
+  enough for those too; NVIDIA High needs a faster card than an RTX 5070.
+- With **AI upscale first** on, frames are generated from the enlarged picture, which
+  takes more than twice as long per frame at 1440p (NVIDIA Low 7 ms, Medium 12 ms on an
+  RTX 5070). Both still fit 30 to 60 there; for 30 to 120 use NVIDIA Low.
 - On other cards (AMD, Intel) the model runs through DirectML, which is slower: at the
   speed measured so far, 30 to 60 fits a 720p capture and not a 1080p one. No AMD or
   Intel card has been timed; the stats overlay shows what yours does.
@@ -196,6 +202,7 @@ Escape close   F1 settings   F3 split   audio 54 ms
 | gpu ms | GPU time per pass. `n/a` if the graphics card has no timestamp queries |
 | red text | a shader that failed to compile (only when editing shaders) |
 | AI frames: ... | what the AI method is doing |
+| AI upscale: ... | what the AI upscaler is doing, and its time per frame |
 | last line | the main keys and the sound's delay |
 
 ## Troubleshooting
@@ -215,9 +222,12 @@ Escape close   F1 settings   F3 split   audio 54 ms
 | Frame generation looks wrong on a 30 fps game | 120 Hz or VRR output: each frame arrives four times, not two | PS5: turn 120 Hz output and VRR off |
 | Stutter | monitor refresh is not a multiple of the shown rate | 60 on a 120, 180 or 240 Hz display paces evenly |
 | Tearing | *immediate* present mode | use *mailbox* |
-| "AI frames (RIFE)" greyed out | the AI download is not installed | run **CapScale AI setup**, then restart |
+| Method offers only Built-in, AI upscale is greyed out | the AI download is not installed, or for AI upscale the card is not an NVIDIA RTX | run **CapScale AI setup**, then restart |
+| No NVIDIA choices after an update | the AI download is from before they existed | run **CapScale AI setup** again; it adds them |
 | `AI frames: preparing the model` | first use of this capture size | wait a minute or two |
 | `AI frames: N ms each, too slow for this rate - built-in used` | the model cannot finish a frame in its slot | lower the target, or keep the built-in method |
 | `AI frames: <format> video is not handled - built-in used` | the card delivers YUY2 or 4:2:2 | the AI method takes 4:2:0 only (MJPEG, NV12) |
+| `AI upscale: N ms a frame, too slow for this rate - the app's own upscaler is used` | the level cannot finish a frame before the next is due. It is tried again by itself after a while | pick a lower level, or a lighter frame generation model |
+| `AI upscale: the picture is not being enlarged at this size` | the window is no larger than the capture | nothing to do: there is nothing to upscale |
 | Card falls back to slow, compressed modes | weak USB port or cable | a rear motherboard port and the cable that came with the card |
 | The app does not start from the shortcut | a start-up failure | the error is shown in a message box; from source, run `uv run capscale` in a console to see the full output |

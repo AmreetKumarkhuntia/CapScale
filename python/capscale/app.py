@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import functools
 import json
 import os
 import sys
@@ -60,8 +59,10 @@ def _self_test(log: Path) -> int:
         from . import Renderer, audio  # noqa: F401
         from .capture import pattern, stream  # noqa: F401
 
-        if ai.available():
-            ai.Model(1920, 1080)
+        for name, _ in ai.frame_models():
+            ai.frame_model(1920, 1080, name)
+        for name, _ in ai.upscalers()[:1]:
+            ai.nvidia.Upscaler((1920, 1080), (2560, 1440), name)
 
         shaders = Path(__file__).with_name("shaders")
         if not (shaders / "common.wgsl").is_file():
@@ -141,53 +142,60 @@ def _open(src: dict, pattern_fmt: str | None):
 
 
 class _Pump(threading.Thread):
-    """Capture thread: reads frames and hands each one to the renderer."""
+    """Capture thread: reads frames and hands each one on to be shown."""
 
-    def __init__(self, renderer, src: dict, pattern_fmt: str | None, gen: ai.FrameGen | None = None):
+    def __init__(self, renderer, src: dict, pattern_fmt: str | None, gen: ai.FrameGen | None = None, upscale: ai.Upscale | None = None):  # fmt: skip
         super().__init__(daemon=True, name="capture")
-        self.renderer, self.src, self.pattern_fmt, self.gen = renderer, src, pattern_fmt, gen
+        self.renderer, self.src, self.pattern_fmt, self.gen, self.upscale = renderer, src, pattern_fmt, gen, upscale
         self.stopping = threading.Event()
         self.error: Exception | None = None
         self.framegen = (False, 0.0, 0.0, False)
+        self.game_fps, self.shown = 0.0, (False, "")
         self.start()
 
     def run(self) -> None:
         try:
             source = _open(self.src, self.pattern_fmt)
-            cadence, told, shown = Cadence(), None, (False, "")
+            cadence, told = Cadence(), None
             capture_fps = float(self.src["fps"])
             try:
                 for data, fmt, w, h, full, matrix, ms in source.frames():
                     if self.stopping.is_set():
                         break
-                    on, content, target, want_ai = self.framegen
-                    by_ai = False
+                    on, content, _, _ = self.framegen
                     if on:
                         forced = None if content <= 0 else content < capture_fps * 0.75
                         keep = cadence.step(luma_of(data, fmt, w, h), forced)
-                        game_fps = capture_fps / 2 if cadence.halved else capture_fps
-                        if game_fps != told:
-                            self.renderer.set_params(detected_fps=game_fps)
-                            told = game_fps
+                        self.game_fps = capture_fps / 2 if cadence.halved else capture_fps
+                        if self.game_fps != told:
+                            self.renderer.set_params(detected_fps=self.game_fps)
+                            told = self.game_fps
                         if not keep:
                             continue
-                        if want_ai and self.gen:
-                            multiple, period = frame_plan(content, game_fps, target)
-                            by_ai = multiple > 1 and self.gen.submit(
-                                data, fmt, w, h, full, matrix, ms, multiple, period
-                            )
-                    state = (by_ai, self.gen.status if on and want_ai and self.gen else "")
-                    if state != shown:
-                        self.renderer.set_params(ai_active=by_ai, note=state[1])
-                        shown = state
-                    if not by_ai:
-                        self.renderer.push_frame(
-                            data, fmt=fmt, width=w, height=h, full_range=full, matrix=matrix, decode_ms=ms
-                        )
+                    if self.upscale:
+                        self.upscale.submit(self._show, data, fmt, w, h, full, matrix, ms)
+                    else:
+                        self._show(data, fmt, w, h, full, matrix, ms)
             finally:
                 source.close()
         except Exception as e:
             self.error = e
+
+    def _show(self, data, fmt, w, h, full, matrix, ms) -> None:
+        """A frame, as captured or enlarged by the AI upscaler: to the AI frame generation
+        if that takes it, else to the renderer. Called on this thread or the upscaler's."""
+        on, content, target, want_ai = self.framegen
+        by_ai = False
+        if on and want_ai and self.gen:
+            multiple, period = frame_plan(content, self.game_fps, target)
+            by_ai = multiple > 1 and self.gen.submit(data, fmt, w, h, full, matrix, ms, multiple, period)
+        notes = (self.gen.status if on and want_ai and self.gen else "", self.upscale.status if self.upscale else "")
+        state = (by_ai, "\n".join(note for note in notes if note))
+        if state != self.shown:
+            self.renderer.set_params(ai_active=by_ai, note=state[1])
+            self.shown = state
+        if not by_ai:
+            self.renderer.push_frame(data, fmt=fmt, width=w, height=h, full_range=full, matrix=matrix, decode_ms=ms)
 
     def stop(self) -> None:
         self.stopping.set()
@@ -273,8 +281,10 @@ def main(argv: list[str] | None = None) -> int:
 
     out = _output_from(cfg, args)
     r = Renderer(*out["out_size"], fullscreen=out["fullscreen"], vsync=out["vsync"], backend=out["backend"])
-    gen = ai.FrameGen(r, functools.partial(ai.Model, name=cfg["ai"]["model"])) if ai.available() else None
-    r.set_params(ai_available=gen is not None)
+    models, upscalers = ai.frame_models(), ai.upscalers()
+    gen = ai.FrameGen(r) if models else None
+    upscale = ai.Upscale(r) if upscalers else None
+    r.set_params(ai_models=models, ai_upscalers=upscalers)
     _apply(r, cfg, args)
     watcher = config.Watcher(cfg_path)
     last_error, retried_at = "", 0.0
@@ -293,7 +303,7 @@ def main(argv: list[str] | None = None) -> int:
     def start() -> None:
         nonlocal pump, audio
         stop()
-        pump = _Pump(r, src, args.test_pattern, gen)
+        pump = _Pump(r, src, args.test_pattern, gen, upscale)
         audio = _start_audio(src, args.test_pattern)
         r.set_params(hint=_hint(cfg, audio))
         r.toggle_pass("capture", True)
@@ -360,7 +370,7 @@ def main(argv: list[str] | None = None) -> int:
                     r.set_params(hint=f"capture: {message} - retrying")
                     last_error = message
                 time.sleep(1.0)
-                pump = _Pump(r, src, args.test_pattern, gen)
+                pump = _Pump(r, src, args.test_pattern, gen, upscale)
                 retried_at = time.monotonic()
             elif last_error and time.monotonic() - retried_at > 3:
                 r.set_params(hint=_hint(cfg, audio))
@@ -371,6 +381,8 @@ def main(argv: list[str] | None = None) -> int:
         stop()
         if gen:
             gen.close()
+        if upscale:
+            upscale.close()
         r.close()
 
 

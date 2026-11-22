@@ -10,7 +10,7 @@ frames, and the card's sound is played alongside.
 | [Configuration](configuration.md) | look up a `config.toml` key, a hotkey action, a command line flag or a file location |
 | [Architecture](architecture.md) | understand the threads, the Rust / Python split and how a frame travels |
 | [Render pipeline](pipeline.md) | read or change a shader, or follow what each GPU pass does |
-| [Frame generation](frame-generation.md) | understand repeat detection, the built-in method and the AI (RIFE) method |
+| [Frame generation](frame-generation.md) | understand repeat detection, the built-in method and the AI models |
 | [Python API](python-api.md) | drive the renderer or reuse the capture, audio or config modules from Python |
 | [Development](development.md) | build from source, run the tests, build the installer |
 

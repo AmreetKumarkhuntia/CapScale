@@ -36,13 +36,19 @@ Step "install" { uv pip install --python .venv-build --reinstall $wheel.FullName
 
 # --add-data brings the shaders, which Python imports alone would not find.
 # Absolute paths: PyInstaller resolves relative ones against --specpath.
-# The hidden imports are what ONNX Runtime needs from the standard library: it is not
-# part of this build (scripts\install-ai.ps1 installs it apart), so PyInstaller cannot see that.
+# The hidden imports are what the AI download needs from the standard library: ONNX Runtime
+# (the first two), then CuPy and NVIDIA's models. None of them is part of this build
+# (scripts\install-ai.ps1 installs them apart), so PyInstaller cannot see that. To find
+# them again: the standard library modules in sys.modules after the models have run that
+# were not there before. The self-test below fails if one is missing.
+$hidden = "socket", "selectors", "base64", "binascii", "bisect", "calendar", "csv", "ctypes.wintypes", "email",
+    "glob", "graphlib", "hashlib", "importlib.abc", "importlib.metadata", "importlib.resources", "importlib.util",
+    "quopri", "random", "tempfile", "zipfile" | ForEach-Object { "--hidden-import", $_ }
 Step "freeze" {
     & .venv-build\Scripts\pyinstaller.exe --noconfirm --clean --windowed `
         --name CapScale --icon "$repo\packaging\icon.ico" `
         --add-data "$repo\python\capscale\shaders;capscale\shaders" `
-        --hidden-import socket --hidden-import selectors `
+        @hidden `
         --distpath dist --workpath build\pyinstaller --specpath build `
         "$repo\packaging\main.py"
 }

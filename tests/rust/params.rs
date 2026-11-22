@@ -100,6 +100,7 @@ fn saved_config_holds_current_values_and_reset_restores_the_look() {
         ..Default::default()
     };
     p.lut_path = r"C:\luts\film.cube".into();
+    p.ai_model = "nvidia-medium".into();
     let toml = p.to_toml();
     for line in [
         "[output]",
@@ -114,6 +115,8 @@ fn saved_config_holds_current_values_and_reset_restores_the_look() {
         "gain = 1.0",
         "matrix = \"bt601\"",
         r#"lut_path = "C:\\luts\\film.cube""#,
+        r#"ai_model = "nvidia-medium""#,
+        r#"ai_upscale = """#,
     ] {
         assert!(toml.contains(line), "missing {line:?} in:\n{toml}");
     }

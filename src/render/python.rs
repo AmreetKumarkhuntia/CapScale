@@ -136,8 +136,9 @@ impl Renderer {
     /// Change any tunable: denoise_strength, sharpness, exposure, contrast, saturation, vibrance, temperature,
     /// tint, gamma, lift, lgg_gamma, gain, lut_path, lut_strength, upscaler, split_pos,
     /// full_range, matrix, vsync, out_size, fullscreen, volume, audio_delay_ms,
-    /// content_fps (0 = measure), target_fps (0 = no frame generation), hint (a line of
-    /// text under the stats).
+    /// content_fps (0 = measure), target_fps (0 = no frame generation), ai_framegen,
+    /// ai_model, ai_still, ai_upscale, ai_models and ai_upscalers (what is installed, as
+    /// (name, label) pairs), hint (a line of text under the stats).
     #[pyo3(signature = (**kwargs))]
     fn set_params(&self, kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<()> {
         let Some(kwargs) = kwargs else { return Ok(()) };
@@ -172,7 +173,10 @@ impl Renderer {
                     "detected_fps" => p.detected_fps = value.extract()?,
                     "ai_framegen" => p.ai_framegen = value.extract()?,
                     "ai_still" => p.ai_still = value.extract()?,
-                    "ai_available" => p.ai_available = value.extract()?,
+                    "ai_model" => p.ai_model = value.extract()?,
+                    "ai_models" => p.ai_models = value.extract()?,
+                    "ai_upscale" => p.ai_upscale = value.extract()?,
+                    "ai_upscalers" => p.ai_upscalers = value.extract()?,
                     "ai_active" => p.ai_active = value.extract()?,
                     "note" => p.note = value.extract()?,
                     "hud_zones" => {
@@ -357,6 +361,25 @@ impl Renderer {
     #[getter]
     fn ai_still(&self) -> bool {
         lock(&self.shared.params).ai_still
+    }
+
+    /// The AI frame model chosen in the settings window: a name from `ai_models`, "" for the first.
+    #[getter]
+    fn ai_model(&self) -> String {
+        lock(&self.shared.params).ai_model.clone()
+    }
+
+    /// The AI upscaler chosen in the settings window: a name from `ai_upscalers`, "" for none.
+    #[getter]
+    fn ai_upscale(&self) -> String {
+        lock(&self.shared.params).ai_upscale.clone()
+    }
+
+    /// The size the picture is drawn at; (0, 0) before the first draw. An upscaler that
+    /// runs ahead of the renderer makes frames of this size.
+    #[getter]
+    fn output_size(&self) -> (u32, u32) {
+        lock(&self.shared.stats).output
     }
 
     /// The HUD zones as (left, top, right, bottom, round), fractions of the picture.

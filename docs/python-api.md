@@ -100,7 +100,7 @@ plus:
 | `hint` | str | a line under the stats |
 | `note` | str | a line above the hint; the app uses it for the AI status |
 | `detected_fps` | float | the game rate found by repeat detection |
-| `ai_available` | bool | enables the AI switch in the settings window |
+| `ai_models`, `ai_upscalers` | list of `(name, label)` | what is installed, for the settings window's Method row and AI upscale list |
 | `ai_active` | bool | the caller is pushing ready-made generated frames; the built-in generation stands down |
 
 ### `toggle_pass(name, on=None) -> bool`
@@ -158,6 +158,8 @@ dropped.
 | `audio` | `(on, volume, delay_ms)` |
 | `hud_zones` | list of `(left, top, right, bottom, round)` |
 | `ai_still` | bool |
+| `ai_model`, `ai_upscale` | the names chosen in the settings window; `""` is the first model, and no AI upscaling |
+| `output_size` | `(width, height)` the picture is drawn at; `(0, 0)` before the first draw |
 
 `stats` keys:
 
@@ -256,8 +258,12 @@ Optional; see [Frame generation](frame-generation.md#the-ai-method).
 | `Model.generate(older, newer, when, matrix="bt709", full_range=False, keep_still=True)` | the picture `when` (0..1) of the way between two `(Y, U, V)` plane tuples |
 | `planes_of(data, fmt, width, height)` | a captured frame copied into `(Y, U, V)`, or `None` for a layout the model does not take |
 | `keep_zones(made, real, zones)` | copies the real pixels into the HUD zones, in place |
-| `FrameGen(renderer, model=Model)` | the AI thread: `submit(...)` a game frame, read `status`, `close()`. `model` is called with `(width, height)` to make the model |
-| `pack.models()` | the installed models: name to file |
+| `FrameGen(renderer, model=frame_model)` | the AI thread: `submit(...)` a game frame, read `status`, `close()`. `model` is called with `(width, height, name)` to make the model the renderer's `ai_model` names |
+| `frame_models()`, `upscalers()` | what is installed, as `(name, label)` pairs |
+| `frame_model(width, height, name="")` | the frame model of that name, an ONNX one or one of NVIDIA's |
+| `Upscale(renderer, scaler=nvidia.Upscaler)` | the upscale thread: `submit(show, frame, fmt, width, height, full_range, matrix, decode_ms)` enlarges the frame with the upscaler the renderer's `ai_upscale` names, to the renderer's `output_size`, and calls `show` with the result and the same things after it; a frame it cannot take is handed to `show` as it is. `status`, `close()` |
+| `nvidia.FrameGenerator(width, height, name)`, `nvidia.Upscaler(size, out, name)` | NVIDIA's frame generation and video super resolution; `nvidia.FRAMEGEN` and `nvidia.UPSCALE` list the names |
+| `pack.models()` | the installed ONNX models: name to file |
 | `engines.ENGINES`, `engines.pick(providers)` | the ways to run a model, in order of preference, and the one to use given what ONNX Runtime offers |
 
 `python -m capscale.ai [WIDTHxHEIGHT] [MODEL]` loads the model, times it and checks its

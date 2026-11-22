@@ -39,6 +39,41 @@ Notes on the chain:
 Colour stays gamma-encoded (as the console sent it) through the chain. Only the
 grade pass converts to linear light, does its work, and converts back.
 
+### AI upscaling ahead of the passes
+
+Optional, on an NVIDIA RTX card with the AI download: `ai_upscale` names a level of
+NVIDIA's Video Super Resolution (`ai/nvidia.py`, the `nvidia-vfx` package). It is
+not a pass. `ai.Upscale` (`ai/upscale.py`) takes each frame from the capture thread
+before anything else is done with it: on a thread of its own it enlarges the frame to
+`Renderer.output_size` and hands the larger one on, to AI frame generation if that is
+on and otherwise to the renderer. So only the game's real frames are enlarged, and
+frames are generated between enlarged ones; doing it the other way round would
+enlarge every generated frame as well. The chain above then starts from a frame that
+is already at output size: pass 4 maps it one to one, and noise reduction and the
+built-in frame generation, if they are on, work on the enlarged picture.
+
+| Level | 1080p to 1440p on an RTX 5070, planes in to planes out |
+|---|---|
+| `nvidia-low`, `nvidia-medium` | 4 ms |
+| `nvidia-high`, `nvidia-highbitrate-high` | 7 ms |
+| `nvidia-ultra` | 8 ms |
+| `nvidia-highbitrate-ultra`, `nvidia-streaming-ultra` | 11 ms |
+
+A frame is handed on as it is, and the pass chain does the enlarging, when:
+
+| Reason | Status line |
+|---|---|
+| the model for this size and level is still loading | `AI upscale: preparing the model` |
+| 30 frames in a row took longer than the gap between frames | `AI upscale: N ms a frame, too slow for this rate - the app's own upscaler is used`. It is tried again after 10 seconds, then 20, doubling up to five minutes; changing the level, the size or the frame generation settings starts afresh |
+| the output is no larger than the frame | `AI upscale: the picture is not being enlarged at this size` |
+| the frame is not 4:2:0 | `AI upscale: <fmt> video is not handled` |
+| the model failed to load or run | `AI upscale not available: ...` / `AI upscale stopped: ...` |
+
+Frames are handed on in the order they came: one that skips the upscaler waits for
+those still in it. The time a frame spends there is added to its `decode_ms`.
+A new output size is taken up once two frames in a row have asked for it, so
+dragging the window's edge does not reload the model at every step.
+
 ### What each shader does
 
 | Shader | Summary |

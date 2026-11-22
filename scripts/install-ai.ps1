@@ -1,7 +1,8 @@
 # Installs the optional AI frame generation: an open-source model (RIFE, MIT) and
 # the runtime that runs it on the graphics card, chosen from the card:
 #
-#   NVIDIA RTX       ONNX Runtime with CUDA and TensorRT. About 4 GB, the fastest.
+#   NVIDIA RTX       ONNX Runtime with CUDA and TensorRT, and NVIDIA's own video models
+#                    (frame generation and upscaling). About 4.6 GB, the fastest.
 #   any other card   ONNX Runtime with DirectML (AMD, Intel, older NVIDIA). Small, slower.
 #
 # In %LOCALAPPDATA%\CapScale\ai. The app, installed or run from source, finds it
@@ -27,8 +28,10 @@ trap {
 # What runs a model, by name. Versions that were tested together: onnxruntime-gpu
 # names the CUDA libraries it was built for, and TensorRT has to be the 10.x line for
 # CUDA 13 to match it. A new one also needs an entry in python\capscale\ai\engines.py.
+# nvidia-vfx is NVIDIA's video models (python\capscale\ai\nvidia.py), which CuPy hands the
+# frames to; CuPy uses the CUDA 13 libraries ONNX Runtime brings. Needs driver 570.65 or newer.
 $runtimes = @{
-    nvidia   = "onnxruntime-gpu[cuda,cudnn]==1.32.0", "tensorrt-cu13-libs==10.16.1.11"
+    nvidia   = "onnxruntime-gpu[cuda,cudnn]==1.32.0", "tensorrt-cu13-libs==10.16.1.11", "nvidia-vfx==0.2.0.0", "cupy-cuda13x==14.2.0"
     directml = "onnxruntime-directml==1.24.4"
 }
 # The models, by name: an archive, and the file in it that build_ai_model.py wraps.
@@ -83,7 +86,10 @@ if ($had -and $had -ne $Runtime) {
     Remove-Item -Recurse -Force "$pack\site", "$pack\engines" -ErrorAction SilentlyContinue
 }
 $packages = $runtimes[$Runtime]
-Step "runtime ($Runtime)" { & $uv pip install --python 3.12 --target "$pack\site" $packages }
+# NVIDIA's own index holds the files of its packages; PyPI only has pointers to them
+Step "runtime ($Runtime)" {
+    & $uv pip install --python 3.12 --target "$pack\site" --extra-index-url https://pypi.nvidia.com $packages
+}
 
 Step "model ($Model)" { curl.exe -sSL --fail -o "$work\model.7z" $source.url }
 # Windows' own tar reads 7z archives

@@ -47,6 +47,8 @@ def load(path: Path) -> dict:
             if section not in cfg or not isinstance(values, dict):
                 raise ValueError(f"unknown section [{section}] in {path}")
             cfg[section].update(values)
+    if cfg["ai"]["model"]:  # where the choice of model was kept before the settings window had it
+        cfg["params"].setdefault("ai_model", cfg["ai"]["model"])
     return cfg
 
 

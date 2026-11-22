@@ -147,8 +147,10 @@ impl Params {
              content_fps = {}    # the game's own frame rate; 0.0 measures it\n\
              target_fps = {}     # frame generation up to this rate; 0.0 is off\n\
              hud_zones = [{}]    # kept out of frame generation: [left, top, right, bottom, 1.0 if round]\n\
-             ai_framegen = {}   # true: frames from the AI model (see README); false: built-in\n\
+             ai_framegen = {}   # true: frames from an AI model (see README); false: built-in\n\
+             ai_model = {}       # which one: an installed model's name, nvidia-low, nvidia-medium or nvidia-high; \"\" is the first installed\n\
              ai_still = {}       # AI method: still areas are left as the real picture\n\
+             ai_upscale = {}     # AI upscaling ahead of the upscaler above, NVIDIA RTX only: \"\" is off, or nvidia-low, -medium, -high, -ultra, -highbitrate-high, -highbitrate-ultra, -streaming-ultra\n\
              {decode}\
              \n\
              [passes]\n\
@@ -189,7 +191,9 @@ impl Params {
             f(self.target_fps),
             zones,
             self.ai_framegen,
+            format_args!("{:?}", self.ai_model),
             self.ai_still,
+            format_args!("{:?}", self.ai_upscale),
             self.denoise,
             self.upscale,
             self.rcas,

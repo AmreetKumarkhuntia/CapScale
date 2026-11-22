@@ -56,4 +56,6 @@ these to the user's own machine, each under its own licence.
 | [RIFE](https://github.com/hzwer/Practical-RIFE) v4.15 lite, as converted to ONNX in the [vs-mlrt](https://github.com/AmusementClub/vs-mlrt) model releases | The frame interpolation model | MIT |
 | [ONNX Runtime](https://github.com/microsoft/onnxruntime) | Running the model | MIT |
 | NVIDIA CUDA runtime, cuDNN and TensorRT (from PyPI) | Running it on an NVIDIA RTX card | NVIDIA's own licence terms: free to use, not open source |
+| NVIDIA Video Effects (`nvidia-vfx`, from NVIDIA's package index) | NVIDIA's frame generation and video upscaling models, on an NVIDIA RTX card | NVIDIA's own licence terms: not open source |
+| [CuPy](https://cupy.dev) | Handing frames to those models on the card | MIT |
 | ONNX Runtime's DirectML build (`onnxruntime-directml` from PyPI) | Running it on any other card | MIT, as the package states; it carries Microsoft's `DirectML.dll` (see [DirectML](https://github.com/microsoft/DirectML) for its terms) |

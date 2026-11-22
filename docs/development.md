@@ -140,12 +140,15 @@ the installed one.
   `python/capscale/ai/engines.py` with ONNX Runtime's name for it and its options.
   The first entry the installed runtime offers is the one used.
 - **A model**: a row of `$models` in `install-ai.ps1` (the archive, and the file in
-  it), then `scripts\install-ai.ps1 -Model <name>` and `model = "<name>"` under
-  `[ai]` in `config.toml`. `build_ai_model.py` wraps a model that has one input (two
+  it), then `scripts\install-ai.ps1 -Model <name>`; it then appears in the Method row
+  of the Frame rate tab. `build_ai_model.py` wraps a model that has one input (two
   RGB pictures and the moment, seven channels) and one output, at any frame size:
   the `rife_v2` files of the vs-mlrt releases. A model of another shape needs its
   own wrapper giving the same inputs and outputs, or its own class in place of
   `ai.Model`: `FrameGen` takes anything that follows `FrameModel` in `ai/types.py`.
+  `ai/nvidia.py` is such a class, for NVIDIA's models; `ai/choice.py` is where a
+  name is turned into the class that runs it, and where the settings window's lists
+  come from.
 
 ## Building the installer
 
@@ -163,7 +166,7 @@ can run while the app is open.
 | build environment | creates `.venv-build` with Python 3.12, once |
 | install | the wheel and PyInstaller into it |
 | freeze | PyInstaller builds `dist\CapScale\` from `packaging\main.py`, windowed, with the shaders added as data |
-| self-test | runs `CapScale.exe --self-test`: a module or data file left out only fails at run time. The error, if any, is in `%APPDATA%\CapScale\self-test.log` |
+| self-test | runs `CapScale.exe --self-test`: a module or data file left out only fails at run time. Where the AI download is installed it loads every frame model and an upscaler too. The error, if any, is in `%APPDATA%\CapScale\self-test.log` |
 | installer | Inno Setup compiles `packaging\installer.iss` |
 
 Results:
@@ -177,9 +180,10 @@ user, adds the Start menu entry and optional desktop shortcut, copies
 setup** entry, shows `packaging\getting-started.txt` on its last page, and on
 uninstall removes the program folder and the AI download.
 
-ONNX Runtime is not part of the frozen app (the AI download brings it), so the two
-standard library modules it needs, `socket` and `selectors`, are named as hidden
-imports in the freeze step.
+ONNX Runtime, CuPy and NVIDIA's models are not part of the frozen app (the AI download
+brings them), so the standard library modules they need and the app does not are named
+as hidden imports in the freeze step (`$hidden` in the script). The self-test loads
+every installed model, so a missing one shows up there.
 
 Having its own `.exe` means graphics driver settings can target the program: in
 the NVIDIA app, add `CapScale.exe` under Graphics > Program settings.

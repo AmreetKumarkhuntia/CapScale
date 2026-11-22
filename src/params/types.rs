@@ -207,12 +207,19 @@ pub struct Params {
     /// until it has. Used when `content_fps` is 0.
     pub detected_fps: f32,
     pub zones: Vec<Zone>,
-    /// The user's choice of method: true = the AI model (the ai package), false = the shaders here.
+    /// The user's choice of method: true = an AI model (the ai package), false = the shaders here.
     pub ai_framegen: bool,
+    /// Which AI model: a name from `ai_models`; empty, or a name not there, is the first.
+    pub ai_model: String,
+    /// The AI frame models that are installed, as (name, label). Set from Python; empty
+    /// greys the choice out.
+    pub ai_models: Vec<(String, String)>,
+    /// AI upscaling, done on the Python side before a frame reaches the passes here:
+    /// a name from `ai_upscalers`, or empty for none.
+    pub ai_upscale: String,
+    pub ai_upscalers: Vec<(String, String)>,
     /// AI method: where the picture is at rest, a generated frame is the real one.
     pub ai_still: bool,
-    /// Whether the AI runtime is installed; the panel greys the choice out without it.
-    pub ai_available: bool,
     /// Set by the Python side while its AI model is the one making the frames: they
     /// then arrive ready-made and the generation here stands down.
     pub ai_active: bool,
@@ -264,8 +271,11 @@ impl Default for Params {
             detected_fps: 0.0,
             zones: Vec::new(),
             ai_framegen: false,
+            ai_model: String::new(),
+            ai_models: Vec::new(),
+            ai_upscale: String::new(),
+            ai_upscalers: Vec::new(),
             ai_still: true,
-            ai_available: false,
             ai_active: false,
             note: String::new(),
             edit_zones: false,
