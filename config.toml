@@ -34,27 +34,29 @@ vsync = "immediate"    # mailbox | fifo | immediate
 backend = "dx12"     # auto | dx12 | vulkan; used at the next start
 
 [params]
-upscaler = "bilinear"    # easu | lanczos3 | bilinear
-denoise_strength = 0.5    # noise reduction, 0 to 1: higher removes more noise and more fine detail
-sharpness = 0.95      # RCAS, AMD's scale: 0.0 is sharpest, each +1.0 halves it, up to 2.0
+upscaler = "easu"    # easu | lanczos3 | bilinear
+denoise_strength = 0.37    # noise reduction, 0 to 1: higher removes more noise and more fine detail
+sharpness = 0.3      # RCAS, AMD's scale: 0.0 is sharpest, each +1.0 halves it, up to 2.0
 exposure = -0.5       # stops
-contrast = 1.1
-saturation = 1.5
-vibrance = 0.15
-temperature = 0.1    # -1 cool .. +1 warm
+contrast = 1.13
+saturation = 1.3
+vibrance = 0.3
+temperature = -0.15    # -1 cool .. +1 warm
 tint = 0.2           # -1 green .. +1 magenta
 gamma = 1.35
 lift = -0.01           # a number, or [r, g, b]
-lgg_gamma = 1.13
-gain = 1.47
+lgg_gamma = 1.1
+gain = 1.3
 lut_path = ""       # path to a .cube file
 lut_strength = 1.0
 split_pos = 0.40585938
 content_fps = 0.0    # the game's own frame rate; 0.0 measures it
 target_fps = 60.0     # frame generation up to this rate; 0.0 is off
 hud_zones = []    # kept out of frame generation: [left, top, right, bottom, 1.0 if round]
-ai_framegen = true   # true: frames from the AI model (see README); false: built-in
+ai_framegen = true   # true: frames from an AI model (see README); false: built-in
+ai_model = "rife_yuv420"       # which one: an installed model's name, nvidia-low, nvidia-medium or nvidia-high; "" is the first installed
 ai_still = true       # AI method: still areas are left as the real picture
+ai_upscale = "nvidia-streaming-ultra"     # AI upscaling ahead of the upscaler above, NVIDIA RTX only: "" is off, or nvidia-low, -medium, -high, -ultra, -highbitrate-high, -highbitrate-ultra, -streaming-ultra
 full_range = true
 matrix = "bt709"
 
@@ -65,7 +67,7 @@ rcas = true
 grade = true
 lut = false
 split = false        # before / after, drag the divider
-overlay = false       # fps, latency, per-pass GPU time
+overlay = true       # fps, latency, per-pass GPU time
 
 [audio]
 enabled = true
