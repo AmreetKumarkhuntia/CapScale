@@ -47,7 +47,7 @@ The choice is remembered: the next start has the same card and mode picked.
   it (or pressing Escape) stops capture and returns you to the settings window.
 
 Changes in the settings window apply at once. They are kept for the next start only
-after **Save to config.toml**. **Reset look** puts sharpening, colour and LUT
+after **Save to config.toml**. **Reset look** puts noise reduction, sharpening, colour and LUT
 strength back to their defaults.
 
 ## Settings window, tab by tab
@@ -89,6 +89,7 @@ See [Frame rate](#frame-rate-1) below.
 
 | Control | Meaning |
 |---|---|
+| Noise reduction, strength | for a card that sends MJPEG: removes the compression speckle before the picture is enlarged and sharpened, which would otherwise make it stand out. Higher is smoother; too high and fine texture goes flat |
 | Upscaler: AMD FSR 1 / Lanczos-3 / Bilinear | how the picture is enlarged. With the box unticked it is plain bilinear |
 | AMD FSR 1 sharpening (RCAS), sharpness | **0 is the sharpest**; each +1 halves the effect, up to 2 |
 | Colour grading | exposure (stops), contrast, saturation, vibrance, temperature, tint, gamma, lift, lgg gamma, gain |

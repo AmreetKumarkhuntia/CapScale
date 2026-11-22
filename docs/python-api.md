@@ -109,7 +109,7 @@ Set a switch, or flip it when `on` is left out. Returns the new state.
 
 | Name | Switches |
 |---|---|
-| `upscale`, `rcas`, `grade`, `lut` | the passes |
+| `denoise`, `upscale`, `rcas`, `grade`, `lut` | the passes |
 | `split` | the before / after view |
 | `overlay` | the stats overlay |
 | `panel` | the settings window |
@@ -167,7 +167,7 @@ dropped.
 | `decode_ms` | as given to `push_frame` |
 | `present_ms` | from the `push_frame` call to the present call |
 | `latency_ms` | `decode_ms + present_ms` |
-| `pass_ms` | dict of GPU milliseconds per pass: `yuv`, `framegen`, `upscale`, `rcas`, `grade`, `lut`, `composite` |
+| `pass_ms` | dict of GPU milliseconds per pass: `yuv`, `framegen`, `denoise`, `upscale`, `rcas`, `grade`, `lut`, `composite` |
 | `gpu_timing` | whether `pass_ms` is measured on this graphics card |
 | `frames`, `rendered` | frames pushed, pictures drawn |
 | `framegen_multiple` | pictures per game frame; 1 when the built-in generation is off |

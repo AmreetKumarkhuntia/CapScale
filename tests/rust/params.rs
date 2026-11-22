@@ -92,6 +92,7 @@ fn fit_keeps_aspect() {
 fn saved_config_holds_current_values_and_reset_restores_the_look() {
     let mut p = Params {
         sharpness: 1.0,
+        denoise_strength: 0.9,
         lift: [0.0, 0.5, 0.0],
         matrix: Some(Matrix::Bt601),
         panel: true,
@@ -107,6 +108,8 @@ fn saved_config_holds_current_values_and_reset_restores_the_look() {
         "[audio]",
         "volume = 1.0",
         "sharpness = 1.0",
+        "denoise_strength = 0.9",
+        "denoise = false",
         "lift = [0.0, 0.5, 0.0]",
         "gain = 1.0",
         "matrix = \"bt601\"",
@@ -116,7 +119,7 @@ fn saved_config_holds_current_values_and_reset_restores_the_look() {
     }
     assert!(!toml.contains("panel") && !toml.contains("capture ="));
     p.reset_look();
-    assert_eq!((p.sharpness, p.lift), (0.4, [0.0; 3]));
+    assert_eq!((p.sharpness, p.lift, p.denoise_strength), (0.4, [0.0; 3], 0.5));
     assert_eq!(p.matrix, Some(Matrix::Bt601));
 }
 
@@ -125,6 +128,7 @@ fn toggles_and_names() {
     let mut p = Params::default();
     assert_eq!(p.toggle("rcas", None), Ok(false));
     assert_eq!(p.toggle("rcas", Some(true)), Ok(true));
+    assert_eq!(p.toggle("denoise", None), Ok(true));
     assert!(p.toggle("nope", None).is_err());
     assert_eq!(p.toggle("capture", None), Ok(true));
     assert_eq!(Upscaler::Easu.next(), Upscaler::Lanczos3);

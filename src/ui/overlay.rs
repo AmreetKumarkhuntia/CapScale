@@ -522,7 +522,9 @@ fn panel_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources, tab
                 });
             }
             Tab::Picture => {
-                section(ui, "Upscale and sharpen", true, |ui| {
+                section(ui, "Clean up, upscale and sharpen", true, |ui| {
+                    ui.checkbox(&mut p.denoise, "Noise reduction (for a card that sends MJPEG)");
+                    slider(ui, &mut p.denoise_strength, 0.0..=1.0, "strength (higher = smoother)");
                     ui.horizontal(|ui| {
                         ui.checkbox(&mut p.upscale, "Upscaler");
                         for u in Upscaler::ALL {

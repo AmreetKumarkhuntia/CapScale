@@ -132,9 +132,10 @@ pub struct Zone {
     pub ellipse: bool,
 }
 
-pub const TOGGLES: [&str; 11] = [
+pub const TOGGLES: [&str; 12] = [
     "audio",
     "zones",
+    "denoise",
     "upscale",
     "rcas",
     "grade",
@@ -149,6 +150,9 @@ pub const TOGGLES: [&str; 11] = [
 #[derive(Clone, Debug, PartialEq)]
 pub struct Params {
     pub upscaler: Upscaler,
+    /// Noise reduction, 0 to 1: how different a neighbouring pixel may be and still
+    /// be averaged in. Higher removes more noise and more fine detail.
+    pub denoise_strength: f32,
     /// RCAS, AMD's scale: 0 is sharpest, each +1 halves it.
     pub sharpness: f32,
     pub exposure: f32,
@@ -173,6 +177,8 @@ pub struct Params {
     /// (0, 0): fit the window.
     pub out_size: (u32, u32),
     pub fullscreen: bool,
+    /// Noise reduction: off by default, a card that sends uncompressed video has none to remove.
+    pub denoise: bool,
     pub upscale: bool,
     pub rcas: bool,
     pub grade: bool,
@@ -219,6 +225,7 @@ impl Default for Params {
     fn default() -> Self {
         Self {
             upscaler: Upscaler::Easu,
+            denoise_strength: 0.5,
             sharpness: 0.4,
             exposure: 0.0,
             contrast: 1.0,
@@ -239,6 +246,7 @@ impl Default for Params {
             backend: Backend::for_this_platform(),
             out_size: (0, 0),
             fullscreen: true,
+            denoise: false,
             upscale: true,
             rcas: true,
             grade: true,

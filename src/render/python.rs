@@ -133,7 +133,7 @@ impl Renderer {
         }
     }
 
-    /// Change any tunable: sharpness, exposure, contrast, saturation, vibrance, temperature,
+    /// Change any tunable: denoise_strength, sharpness, exposure, contrast, saturation, vibrance, temperature,
     /// tint, gamma, lift, lgg_gamma, gain, lut_path, lut_strength, upscaler, split_pos,
     /// full_range, matrix, vsync, out_size, fullscreen, volume, audio_delay_ms,
     /// content_fps (0 = measure), target_fps (0 = no frame generation), hint (a line of
@@ -148,6 +148,7 @@ impl Renderer {
             let bad = |expected: &str| PyValueError::new_err(format!("{key}: expected {expected}"));
             let mut set = || -> PyResult<()> {
                 match key.as_str() {
+                    "denoise_strength" => p.denoise_strength = value.extract()?,
                     "sharpness" => p.sharpness = value.extract()?,
                     "exposure" => p.exposure = value.extract()?,
                     "contrast" => p.contrast = value.extract()?,
@@ -256,7 +257,7 @@ impl Renderer {
     }
 
     /// Turn a pass or view on or off; with `on` left out, flip it. Returns the new state.
-    /// Names: upscale, rcas, grade, lut, split, overlay, panel (the settings window),
+    /// Names: denoise, upscale, rcas, grade, lut, split, overlay, panel (the settings window),
     /// capture (the picture window), fullscreen, audio, zones.
     #[pyo3(signature = (name, on=None))]
     fn toggle_pass(&self, name: &str, on: Option<bool>) -> PyResult<bool> {

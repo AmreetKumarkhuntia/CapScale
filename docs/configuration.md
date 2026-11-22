@@ -69,6 +69,7 @@ Values outside the range are clamped, not rejected.
 | Key | Default | Range | Meaning |
 |---|---|---|---|
 | `upscaler` | `"easu"` | `easu`, `lanczos3`, `bilinear` | AMD FSR 1, Lanczos-3 or bilinear |
+| `denoise_strength` | `0.5` | 0 to 1 | noise reduction: how different a neighbouring pixel may be and still be averaged in. Higher removes more noise and more fine detail |
 | `sharpness` | `0.4` | 0 to 2 | RCAS, AMD's scale: 0 is sharpest, each +1 halves it |
 | `exposure` | `0.0` | -5 to 5 | stops |
 | `contrast` | `1.0` | 0.1 to 3 | pivots on mid grey |
@@ -95,6 +96,7 @@ Values outside the range are clamped, not rejected.
 
 | Key | Default | Meaning |
 |---|---|---|
+| `denoise` | `false` | noise reduction, before the upscale. For a card that sends compressed video (MJPEG); on uncompressed video it only softens |
 | `upscale` | `true` | `false`: plain bilinear, whatever `upscaler` says |
 | `rcas` | `true` | sharpening |
 | `grade` | `true` | colour grading |
@@ -145,7 +147,7 @@ All actions:
 
 | Action | Does |
 |---|---|
-| `toggle:<name>` | flips `upscale`, `rcas`, `grade`, `lut`, `split`, `overlay`, `panel` (settings window), `fullscreen`, `audio` or `zones` (show and move HUD zones) |
+| `toggle:<name>` | flips `denoise`, `upscale`, `rcas`, `grade`, `lut`, `split`, `overlay`, `panel` (settings window), `fullscreen`, `audio` or `zones` (show and move HUD zones) |
 | `cycle:upscaler` | next upscaler |
 | `stop` | stop capture and hide the picture window |
 | `pick_source` | show the settings window |

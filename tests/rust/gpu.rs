@@ -21,6 +21,8 @@ struct Gpu {
     target: wgpu::Texture,
     generation: u64,
     zones: Vec<Zone>,
+    /// Noise reduction strength; 0 leaves the pass off.
+    denoise: f32,
 }
 
 impl Gpu {
@@ -58,6 +60,7 @@ impl Gpu {
             target,
             generation: 0,
             zones: Vec::new(),
+            denoise: 0.0,
         })
     }
 
@@ -87,6 +90,7 @@ impl Gpu {
         let mut params = Params::default();
         (params.upscale, params.rcas, params.grade, params.lut) = (false, false, false, false);
         params.zones = self.zones.clone();
+        (params.denoise, params.denoise_strength) = (self.denoise > 0.0, self.denoise);
         let info = FrameInfo {
             src: (W, H),
             out: (W, H),
@@ -527,5 +531,54 @@ fn a_hud_zone_shows_the_real_frame_while_the_rest_is_generated() {
     assert!(
         open > 36.0,
         "outside the zones frames are still generated: {open:.1} dB"
+    );
+}
+
+#[test]
+fn noise_reduction_removes_noise_and_keeps_edges() {
+    let Some(mut gpu) = Gpu::new() else {
+        eprintln!("no GPU here, skipping");
+        return;
+    };
+    let step = Step {
+        new_frame: true,
+        generating: false,
+        phase: None,
+    };
+    let crop = |image: &Image, xs: std::ops::Range<u32>, ys: std::ops::Range<u32>| -> Image {
+        ys.flat_map(|y| xs.clone().map(move |x| (y * W + x) as usize))
+            .map(|i| image[i])
+            .collect()
+    };
+    let (clean, noisy) = (hard_scene(0.0, false), hard_scene(0.0, true));
+    gpu.push(&noisy);
+    let off = psnr(&gpu.draw(step), &noisy);
+    assert!(off > 45.0, "switched off, the frame passes through: {off:.1} dB");
+
+    gpu.denoise = 0.5;
+    let cleaned = gpu.draw(step);
+    let (before, after) = (psnr(&noisy, &clean), psnr(&cleaned, &clean));
+    let hud = |image: &Image| psnr(&crop(image, 20..196, 20..48), &crop(&clean, 20..196, 20..48));
+    let cross =
+        |image: &Image| psnr(&crop(image, 308..332, 168..192), &crop(&clean, 308..332, 168..192));
+    eprintln!(
+        "against the clean picture: noisy {before:.1} dB, cleaned {after:.1} dB; HUD {:.1} -> {:.1} dB, crosshair {:.1} -> {:.1} dB",
+        hud(&noisy), hud(&cleaned), cross(&noisy), cross(&cleaned)
+    );
+    assert!(
+        after > before + 1.0,
+        "the picture should come out closer to the clean one: {before:.1} -> {after:.1} dB"
+    );
+    assert!(
+        hud(&cleaned) > hud(&noisy) + 3.0,
+        "HUD text should get cleaner, not blurred: {:.1} -> {:.1} dB",
+        hud(&noisy),
+        hud(&cleaned)
+    );
+    assert!(
+        cross(&cleaned) > cross(&noisy),
+        "the one-pixel crosshair should survive: {:.1} -> {:.1} dB",
+        cross(&noisy),
+        cross(&cleaned)
     );
 }

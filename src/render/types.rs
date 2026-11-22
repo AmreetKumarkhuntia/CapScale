@@ -21,6 +21,7 @@ use crate::source::Source;
 pub const PASS_NAMES: [&str; SLOTS] = [
     "yuv",
     "framegen",
+    "denoise",
     "upscale",
     "rcas",
     "grade",
@@ -149,6 +150,9 @@ pub(super) struct Gen {
 pub(super) struct Chain {
     /// The two newest converted frames; `Pipeline::newest` says which is which.
     pub(super) rgb: [wgpu::TextureView; 2],
+    /// The picture after noise reduction, at capture size.
+    pub(super) den: wgpu::TextureView,
+    pub(super) bg_den: wgpu::BindGroup,
     pub(super) a: wgpu::TextureView,
     pub(super) b: wgpu::TextureView,
     pub(super) bg_src: wgpu::BindGroup,
@@ -272,7 +276,7 @@ pub(crate) struct Renderer {
 }
 
 /// Shader file names, without `.wgsl`. Indices are used throughout this module.
-pub const FILES: [&str; 11] = [
+pub const FILES: [&str; 12] = [
     "yuv2rgb",
     "bilinear",
     "lanczos3",
@@ -284,6 +288,7 @@ pub const FILES: [&str; 11] = [
     "luma",
     "flow",
     "interp",
+    "denoise",
 ];
 
 pub(super) const YUV: usize = 0;
@@ -308,24 +313,29 @@ pub(super) const FLOW: usize = 9;
 
 pub(super) const INTERP: usize = 10;
 
+pub(super) const DENOISE: usize = 11;
+
 /// Timing slots, in the order of `PASS_NAMES`.
 pub(super) const SLOT_YUV: usize = 0;
 
 pub(super) const SLOT_FRAMEGEN: usize = 1;
 
-pub(super) const SLOT_UPSCALE: usize = 2;
+pub(super) const SLOT_DENOISE: usize = 2;
 
-pub(super) const SLOT_RCAS: usize = 3;
+pub(super) const SLOT_UPSCALE: usize = 3;
 
-pub(super) const SLOT_GRADE: usize = 4;
+pub(super) const SLOT_RCAS: usize = 4;
 
-pub(super) const SLOT_LUT: usize = 5;
+pub(super) const SLOT_GRADE: usize = 5;
+
+pub(super) const SLOT_LUT: usize = 6;
 
 pub(super) const INTERMEDIATE: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
 pub(super) const COMMON: &str = "common";
 
-pub const SLOTS: usize = 7;
+// shortcut: Timing keeps "which slots ran" in a u8, which 8 slots fill; widen it for a ninth
+pub const SLOTS: usize = 8;
 
 pub(super) const QUERIES: u32 = SLOTS as u32 * 2;
 

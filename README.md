@@ -109,6 +109,9 @@ Three ways to change the same values:
 
 RCAS sharpness uses AMD's scale: **0.0 is the sharpest**, each +1.0 halves it, up to 2.0.
 
+A card that sends MJPEG leaves compression speckle in the picture, and sharpening makes it
+stand out. **Noise reduction** on the Picture tab removes it before the upscale.
+
 The stats overlay shows capture and render rate, added latency (decode time plus
 the time from handing a frame over to presenting it; display scan-out is not
 included), and GPU time per pass.
@@ -228,6 +231,7 @@ and the error shows in the stats overlay.
 |---|---|---|
 | YUV to RGB | `yuv2rgb.wgsl` | NV12, YUY2 or planar; BT.601 / BT.709, limited or full range |
 | Frame generation | `luma.wgsl`, `flow.wgsl`, `interp.wgsl` | optional; motion search on a brightness pyramid, then a warp. The AI method runs before the pipeline instead (`ai/`) |
+| Noise reduction | `denoise.wgsl` | optional; a bilateral filter at capture size, for cards that send MJPEG |
 | Upscale | `easu.wgsl`, `lanczos3.wgsl`, `bilinear.wgsl` | switchable while running |
 | Sharpen | `rcas.wgsl` | FSR 1 RCAS |
 | Grade | `grade.wgsl` | in linear light: exposure, white balance, contrast, saturation, vibrance, lift / gamma / gain |
@@ -246,7 +250,7 @@ r.toggle_pass("capture", True)    # show the picture window; it is hidden until 
 r.push_frame(array, fmt="nv12", width=1920, height=1080)               # newest frame wins
 r.set_params(sharpness=0.4, exposure=0.0, saturation=1.1,
              lut_path="film.cube", lut_strength=0.6, upscaler="easu")
-r.toggle_pass("rcas", False)      # upscale, rcas, grade, lut, split, overlay, panel, capture, fullscreen
+r.toggle_pass("rcas", False)      # denoise, upscale, rcas, grade, lut, split, overlay, panel, capture, fullscreen
 r.stats                           # dict: fps, latency_ms, pass_ms, ...
 r.poll_events()                   # [("key", "F1"), ("closed", ""), ...]
 r.close()

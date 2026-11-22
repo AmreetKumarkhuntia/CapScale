@@ -4,6 +4,7 @@ impl Params {
     /// Set a named toggle, or flip it when `on` is None. Returns the new state.
     pub fn toggle(&mut self, name: &str, on: Option<bool>) -> Result<bool, String> {
         let slot = match name {
+            "denoise" => &mut self.denoise,
             "upscale" => &mut self.upscale,
             "rcas" => &mut self.rcas,
             "grade" => &mut self.grade,
@@ -27,6 +28,7 @@ impl Params {
 
     /// Keep values inside the ranges the shaders are written for.
     pub fn clamp(&mut self) {
+        self.denoise_strength = self.denoise_strength.clamp(0.0, 1.0);
         self.sharpness = self.sharpness.clamp(0.0, 2.0);
         self.exposure = self.exposure.clamp(-5.0, 5.0);
         self.contrast = self.contrast.clamp(0.1, 3.0);
@@ -76,6 +78,7 @@ impl Params {
         (self.temperature, self.tint, self.gamma, self.lut_strength) =
             (d.temperature, d.tint, d.gamma, d.lut_strength);
         (self.lift, self.lgg_gamma, self.gain) = (d.lift, d.lgg_gamma, d.gain);
+        self.denoise_strength = d.denoise_strength;
     }
 
     /// The config.toml sections the options panel owns ([output], [params], [passes],
@@ -126,6 +129,7 @@ impl Params {
              \n\
              [params]\n\
              upscaler = \"{}\"    # easu | lanczos3 | bilinear\n\
+             denoise_strength = {}    # noise reduction, 0 to 1: higher removes more noise and more fine detail\n\
              sharpness = {}      # RCAS, AMD's scale: 0.0 is sharpest, each +1.0 halves it, up to 2.0\n\
              exposure = {}       # stops\n\
              contrast = {}\n\
@@ -148,6 +152,7 @@ impl Params {
              {decode}\
              \n\
              [passes]\n\
+             denoise = {}       # noise reduction, for a card that sends compressed video (MJPEG)\n\
              upscale = {}       # false: plain bilinear\n\
              rcas = {}\n\
              grade = {}\n\
@@ -165,6 +170,7 @@ impl Params {
             self.vsync.name(),
             self.backend.name(),
             self.upscaler.name(),
+            f(self.denoise_strength),
             f(self.sharpness),
             f(self.exposure),
             f(self.contrast),
@@ -184,6 +190,7 @@ impl Params {
             zones,
             self.ai_framegen,
             self.ai_still,
+            self.denoise,
             self.upscale,
             self.rcas,
             self.grade,

@@ -1,4 +1,4 @@
-//! The pass chain: YUV -> RGB, frame generation, upscale, sharpen, grade, LUT, composite.
+//! The pass chain: YUV -> RGB, frame generation, noise reduction, upscale, sharpen, grade, LUT, composite.
 //!
 //! Every pass is one fullscreen triangle and one fragment shader. They all share a
 //! uniform block (group 0) and one texture layout (group 1), so a single constructor
@@ -8,9 +8,9 @@ use crate::lut::{self, Cube};
 use crate::params::{Globals, Params, Upscaler};
 
 use super::types::{
-    Chain, Composite, Gen, Pipeline, ShaderDir, Step, Timing, BILINEAR, COMPOSITE, EASU, FILES, FLOW,
-    GRADE, INTERMEDIATE, INTERP, LANCZOS3, LUMA, LUT, RCAS, SLOT_FRAMEGEN, SLOT_GRADE, SLOT_LUT,
-    SLOT_RCAS, SLOT_UPSCALE, SLOT_YUV, YUV,
+    Chain, Composite, Gen, Pipeline, ShaderDir, Step, Timing, BILINEAR, COMPOSITE, DENOISE, EASU,
+    FILES, FLOW, GRADE, INTERMEDIATE, INTERP, LANCZOS3, LUMA, LUT, RCAS, SLOT_DENOISE,
+    SLOT_FRAMEGEN, SLOT_GRADE, SLOT_LUT, SLOT_RCAS, SLOT_UPSCALE, SLOT_YUV, YUV,
 };
 
 /// Depth of the brightness pyramid motion is searched on: enough halvings to bring
@@ -330,12 +330,15 @@ impl Pipeline {
             target(device, "rgb 0", self.src_size),
             target(device, "rgb 1", self.src_size),
         ];
+        let den = target(device, "denoised", self.src_size);
         let a = target(device, "out a", self.out_size);
         let b = target(device, "out b", self.out_size);
         let src = |i: usize| self.src_views.get(i).unwrap_or(d);
         self.chain = Some(Chain {
             bg_src: self.bind(device, [src(0), src(1), src(2)]),
             bg_rgb: [0, 1].map(|frame| self.bind(device, [&rgb[frame], d, d])),
+            bg_den: self.bind(device, [&den, d, d]),
+            den,
             bg_a: self.bind(device, [&a, d, d]),
             bg_b: self.bind(device, [&b, d, d]),
             bg_comp: [0, 1].map(|frame| {
@@ -437,6 +440,13 @@ impl Pipeline {
                 self.run(encoder, shader, bind_group, output, timestamps);
             }
             input = &gen.bg_mid;
+        }
+
+        // Before the upscale: noise is one capture pixel in size here, and the
+        // upscaler and the sharpener then both work on a clean picture.
+        if p.denoise && p.denoise_strength > 0.0 {
+            self.run(encoder, DENOISE, input, &c.den, timing.writes(SLOT_DENOISE));
+            input = &c.bg_den;
         }
 
         let upscaler = match (p.upscale, p.upscaler) {

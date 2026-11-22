@@ -23,7 +23,7 @@ impl Globals {
             wb: v4(wb, 1.0 / p.gamma),
             lift: v4(p.lift, f.phase),
             inv_lgg_gamma: v4(p.lgg_gamma.map(|g| 1.0 / g), 0.0),
-            gain: v4(p.gain, 0.0),
+            gain: v4(p.gain, p.denoise_strength),
             lut_min: v4(lut_min, 0.0),
             lut_scale: v4(lut_scale, 0.0),
             misc: [

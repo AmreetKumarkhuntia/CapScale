@@ -11,18 +11,22 @@ fullscreen triangle and one fragment shader, one file in
 |---|---|---|---|---|---|
 | 1 | YUV to RGB | `yuv2rgb.wgsl` | the source planes | `rgb[newest]` | capture |
 | 2 | Frame generation (optional) | `luma.wgsl`, `flow.wgsl`, `interp.wgsl` | `rgb[older]`, `rgb[newest]` | `mid` | capture |
-| 3 | Upscale | `easu.wgsl`, `lanczos3.wgsl` or `bilinear.wgsl` | `rgb[newest]` or `mid` | `a` | output |
-| 4 | Sharpen (optional) | `rcas.wgsl` | `a` or `b` | the other one | output |
-| 5 | Grade (optional) | `grade.wgsl` | `a` or `b` | the other one | output |
-| 6 | LUT (optional) | `lut3d.wgsl` | `a` or `b` | the other one | output |
-| 7 | Composite | `composite.wgsl` | `rgb[newest]`, the last of `a` / `b` | the window | window |
+| 3 | Noise reduction (optional) | `denoise.wgsl` | `rgb[newest]` or `mid` | `den` | capture |
+| 4 | Upscale | `easu.wgsl`, `lanczos3.wgsl` or `bilinear.wgsl` | `rgb[newest]`, `mid` or `den` | `a` | output |
+| 5 | Sharpen (optional) | `rcas.wgsl` | `a` or `b` | the other one | output |
+| 6 | Grade (optional) | `grade.wgsl` | `a` or `b` | the other one | output |
+| 7 | LUT (optional) | `lut3d.wgsl` | `a` or `b` | the other one | output |
+| 8 | Composite | `composite.wgsl` | `rgb[newest]`, the last of `a` / `b` | the window | window |
 
 Notes on the chain:
 
 - **Two source frames are kept.** `rgb` is a pair of targets; `Pipeline::newest`
   says which holds the newest converted frame. Frame generation needs both, and
   the composite pass uses the newest as the "before" side of the split.
-- **`a` and `b` ping-pong.** Passes 4 to 6 each read one and write the other, so a
+- **Noise reduction runs at capture size, before the upscale.** Compression noise
+  is one capture pixel in size there, and the upscaler and the sharpener then both
+  work on a clean picture. The split's "before" side still shows the untouched frame.
+- **`a` and `b` ping-pong.** Passes 5 to 7 each read one and write the other, so a
   pass that is switched off costs nothing: it is simply not run.
 - **Upscale always runs**, so `a` always holds a picture at output size. With the
   upscaler switched off it is the bilinear shader.
@@ -41,6 +45,7 @@ grade pass converts to linear light, does its work, and converts back.
 |---|---|
 | `yuv2rgb` | one branch per layout: NV12 (Y plane + interleaved CbCr), YUY2 (one texel per pixel pair), planar (three planes; bilinear chroma covers 4:2:0, 4:2:2 and 4:4:4). The matrix and range are already folded into three rows of the uniform block |
 | `luma`, `flow`, `interp` | see [Frame generation](frame-generation.md#the-built-in-method) |
+| `denoise` | a bilateral filter, 5 x 5: each pixel becomes an average of its neighbours, weighted by distance and by how close their colour is, so noise is averaged away and edges are not averaged across. For cards that send MJPEG, whose compression noise the sharpening and grading would otherwise multiply |
 | `easu` | port of AMD FSR 1.0 EASU (edge adaptive spatial upsampling) |
 | `lanczos3` | Lanczos-3, 6 x 6 taps in one pass |
 | `bilinear` | one bilinear tap: the baseline to compare the others against |
@@ -91,7 +96,7 @@ is filled by `Globals::new` (`src/params/globals.rs`) once per draw.
 | `wb` | white balance gains for r, g, b; 1 / gamma |
 | `lift` | lift r, g, b; **frame generation phase** (0 at the older frame, 1 at the newer) |
 | `inv_lgg_gamma` | 1 / lgg_gamma for r, g, b |
-| `gain` | gain r, g, b |
+| `gain` | gain r, g, b; **noise reduction strength**, 0 to 1 |
 | `lut_min`, `lut_scale` | the LUT's input domain: `(colour - lut_min) * lut_scale` is 0..1 |
 | `misc` | RCAS constant `2^-sharpness`, LUT strength, split position, LUT edge length |
 | `flags` (u32) | source layout (0 NV12, 1 YUY2, 2 planar), split on, number of HUD zones, bit *i* set = zone *i* is an ellipse |
@@ -114,6 +119,7 @@ the capture size, the render size or the LUT changes, never per frame.
 | Target | Size | Count |
 |---|---|---|
 | `rgb` | capture | 2 |
+| `den` (after noise reduction) | capture | 1 |
 | `a`, `b` | render size | 1 each |
 | `luma` pyramid | capture / 2, / 4, ... | 2 pyramids, one per source frame |
 | `flow` | one per pyramid level | 1 set |
@@ -126,7 +132,7 @@ With `0 x 0` it is the largest size with the source's shape that fits the window
 ## GPU timing
 
 `render::Timing` measures each pass with timestamp queries: one start and one end
-per slot, in the order `yuv, framegen, upscale, rcas, grade, lut, composite`
+per slot, in the order `yuv, framegen, denoise, upscale, rcas, grade, lut, composite`
 (`PASS_NAMES`). Frame generation is several passes timed as one slot: its first
 pass records the start, its last the end.
 

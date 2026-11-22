@@ -12,7 +12,7 @@ struct Globals {
     wb: vec4<f32>,             // white-balance rgb gains, 1 / gamma
     lift: vec4<f32>,           // rgb lift; w = frame generation phase, 0 older frame .. 1 newer
     inv_lgg_gamma: vec4<f32>,
-    gain: vec4<f32>,
+    gain: vec4<f32>,           // rgb gain; w = noise reduction strength, 0..1
     lut_min: vec4<f32>,        // LUT input domain
     lut_scale: vec4<f32>,
     misc: vec4<f32>,           // RCAS exp2(-sharpness), LUT strength, split position, LUT size

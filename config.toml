@@ -35,6 +35,7 @@ backend = "dx12"     # auto | dx12 | vulkan; used at the next start
 
 [params]
 upscaler = "bilinear"    # easu | lanczos3 | bilinear
+denoise_strength = 0.5    # noise reduction, 0 to 1: higher removes more noise and more fine detail
 sharpness = 0.95      # RCAS, AMD's scale: 0.0 is sharpest, each +1.0 halves it, up to 2.0
 exposure = -0.5       # stops
 contrast = 1.1
@@ -58,6 +59,7 @@ full_range = true
 matrix = "bt709"
 
 [passes]
+denoise = true       # noise reduction, for a card that sends compressed video (MJPEG)
 upscale = true       # false: plain bilinear
 rcas = true
 grade = true
