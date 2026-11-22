@@ -201,7 +201,7 @@ pub struct Params {
     /// until it has. Used when `content_fps` is 0.
     pub detected_fps: f32,
     pub zones: Vec<Zone>,
-    /// The user's choice of method: true = the AI model (ai.py), false = the shaders here.
+    /// The user's choice of method: true = the AI model (the ai package), false = the shaders here.
     pub ai_framegen: bool,
     /// AI method: where the picture is at rest, a generated frame is the real one.
     pub ai_still: bool,

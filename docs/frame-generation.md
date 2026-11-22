@@ -146,10 +146,32 @@ the second.
 ## The AI method
 
 The open-source [RIFE](https://github.com/hzwer/Practical-RIFE) model
-(`rife_v4.15_lite`), run through ONNX Runtime with NVIDIA TensorRT. It is not part
+(`rife_v4.15_lite`), run through ONNX Runtime. It is not part
 of the app; `scripts/install-ai.ps1` puts it in `%LOCALAPPDATA%\CapScale\ai`.
-`ai.available()` is true when the model file and ONNX Runtime are there, and only
+`ai.available()` is true when a model file and ONNX Runtime are there, and only
 then is the switch in the settings window enabled.
+
+### Engines and models
+
+Two things plug in, each from a table.
+
+**The engine** is how ONNX Runtime reaches the graphics card. `install-ai.ps1`
+picks a runtime from the card's name, and `ai/engines.py` uses the first entry of
+`ENGINES` that the installed runtime offers:
+
+| Engine | Cards | Runtime packages | 1080p frame on an RTX 5070 |
+|---|---|---|---|
+| TensorRT | NVIDIA RTX | `onnxruntime-gpu`, `tensorrt-cu13-libs` (about 4 GB) | 10 to 12 ms |
+| DirectML | any DirectX 12 card: AMD, Intel, older NVIDIA | `onnxruntime-directml` (about 150 MB) | about 33 ms (13 ms at 720p) |
+
+DirectML runs the model in full precision and TensorRT in half. No AMD or Intel
+card has been timed. `-Runtime nvidia` or `-Runtime directml` on the script
+overrides the choice.
+
+**The model** is any `.onnx` file in the pack that has the inputs and outputs
+below; its name is the file name. `[ai] model` in `config.toml` names the one to
+use, and empty means the first. Adding either is covered in
+[Development](development.md#adding-an-engine-or-a-model).
 
 ### The model takes the card's frames directly
 
@@ -174,7 +196,8 @@ switches this off and the model draws everything.
 
 ### `ai.Model`
 
-One ONNX Runtime session for one frame size. TensorRT builds an engine for the
+One ONNX Runtime session for one model and one frame size, opened by
+`engines.session`. TensorRT builds an engine for the
 graphics card the first time a size is used, which takes a minute or two; it is
 kept in `ai\engines`. The model is run a few times on load to time it
 (`Model.took`), and that figure is kept up to date while it runs.
@@ -210,10 +233,10 @@ is added to its `decode_ms`, so the overlay's latency figure stays true.
 
 | | Built-in | AI (RIFE) |
 |---|---|---|
-| Needs | any supported graphics card | NVIDIA RTX, 4 GB download |
-| Extra delay at 30 to 60 | about 17 ms | about 28 ms (RTX 5070, 1080p) |
-| Cost per generated frame | under 1 ms of GPU | 10 to 12 ms (RTX 5070, 1080p) |
-| Rates it can reach | any multiple up to 8x | as far as a frame fits its slot: 30 to 60 and 30 to 90 on an RTX 5070 |
+| Needs | any supported graphics card | a download: 4 GB for NVIDIA RTX, 150 MB for other cards |
+| Extra delay at 30 to 60 | about 17 ms | about 28 ms (RTX 5070 with TensorRT, 1080p) |
+| Cost per generated frame | under 1 ms of GPU | 10 to 12 ms with TensorRT, about 33 ms with DirectML (RTX 5070, 1080p) |
+| Rates it can reach | any multiple up to 8x | as far as a frame fits its slot. On an RTX 5070: 30 to 60 and 30 to 90 at 1080p with TensorRT; 30 to 60 at 720p with DirectML |
 | Video it takes | everything the renderer takes | 4:2:0 only (MJPEG, NV12) |
 | Weak spots | small objects against a moving background; a thin strip at the edges during a pan | small still things on top of motion look a little soft |
 
@@ -226,5 +249,5 @@ Try both on your game.
 | `uv run capscale --test-pattern i420:30 --windowed` | a 30 fps picture in a 60 Hz signal, to watch either method |
 | `cargo test` | the built-in method on the real GPU against a scene with known motion: generated frames follow the motion, overlays stay steady under noise, a HUD zone shows the real frame |
 | `uv run pytest tests/python/test_repeats.py` | repeat detection, including noise and rhythm slips |
-| `uv run pytest tests/python/test_ai.py` | the AI thread's timing and fallbacks with a stand-in model, and the real model where it is installed |
-| `uv run python -m capscale.ai [WIDTHxHEIGHT]` | loads the real model, times it, and scores its output on a picture that moves by a known amount |
+| `uv run pytest tests/python/test_ai.py` | the AI thread's timing and fallbacks with a stand-in model, the choice of engine and model, and the real model where it is installed |
+| `uv run python -m capscale.ai [WIDTHxHEIGHT] [MODEL]` | loads the real model, says which engine runs it, times it, and scores its output on a picture that moves by a known amount |

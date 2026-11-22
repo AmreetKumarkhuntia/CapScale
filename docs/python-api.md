@@ -252,13 +252,15 @@ Optional; see [Frame generation](frame-generation.md#the-ai-method).
 |---|---|
 | `PACK` | where the AI download lives |
 | `available()` | whether it is installed |
-| `Model(width, height)` | loads RIFE for one frame size; `took` is seconds per generated frame |
+| `Model(width, height, name="")` | loads an installed model for one frame size (`""`: the first one); `took` is seconds per generated frame |
 | `Model.generate(older, newer, when, matrix="bt709", full_range=False, keep_still=True)` | the picture `when` (0..1) of the way between two `(Y, U, V)` plane tuples |
 | `planes_of(data, fmt, width, height)` | a captured frame copied into `(Y, U, V)`, or `None` for a layout the model does not take |
 | `keep_zones(made, real, zones)` | copies the real pixels into the HUD zones, in place |
-| `FrameGen(renderer)` | the AI thread: `submit(...)` a game frame, read `status`, `close()` |
+| `FrameGen(renderer, model=Model)` | the AI thread: `submit(...)` a game frame, read `status`, `close()`. `model` is called with `(width, height)` to make the model |
+| `pack.models()` | the installed models: name to file |
+| `engines.ENGINES`, `engines.pick(providers)` | the ways to run a model, in order of preference, and the one to use given what ONNX Runtime offers |
 
-`python -m capscale.ai [WIDTHxHEIGHT]` loads the model, times it and checks its
+`python -m capscale.ai [WIDTHxHEIGHT] [MODEL]` loads the model, times it and checks its
 output.
 
 ## `capscale.config`

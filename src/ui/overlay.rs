@@ -372,7 +372,7 @@ fn guide_ui(ui: &mut egui::Ui, tab: &mut Tab) {
     ui.strong("Making it look better");
     for (name, what) in [
         ("Picture", "the upscaler, sharpening, colour grading and a .cube LUT."),
-        ("Frame rate", "generates in-between frames, for example a 30 fps game to 60. Built in, or AI (RIFE) on an NVIDIA RTX card."),
+        ("Frame rate", "generates in-between frames, for example a 30 fps game to 60. Built in, or AI (RIFE): fastest on an NVIDIA RTX card, slower on others."),
         ("Output", "window size, vsync and the stats overlay."),
         ("Audio", "plays the game's sound; move the delay slider if sound comes before the picture."),
     ] {
@@ -471,7 +471,7 @@ fn panel_ui(ui: &mut egui::Ui, p: &mut Params, s: &Stats, src: &mut Sources, tab
                 ui.add_enabled_ui(p.ai_available, |ui| {
                     ui.checkbox(&mut p.ai_framegen, "AI frames (RIFE)")
                         .on_hover_text("On: generated frames come from the RIFE model. Off: the built-in method.")
-                        .on_disabled_hover_text("Not installed. Run CapScale AI setup from the Start menu (about 4 GB), then restart.");
+                        .on_disabled_hover_text("Not installed. Run CapScale AI setup from the Start menu, then restart.");
                 });
                 ui.add_enabled_ui(p.ai_available && p.ai_framegen, |ui| {
                     ui.checkbox(&mut p.ai_still, "AI: leave still areas untouched")

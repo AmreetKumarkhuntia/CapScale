@@ -32,7 +32,7 @@ InfoAfterFile=getting-started.txt
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"
-Name: "aiframes"; Description: "Download AI frame generation (about 4 GB, NVIDIA RTX only)"; Flags: unchecked
+Name: "aiframes"; Description: "Download AI frame generation (NVIDIA RTX: about 4 GB; other cards: about 150 MB, slower)"; Flags: unchecked
 
 [Files]
 Source: "..\dist\CapScale\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
@@ -49,10 +49,10 @@ Name: "{autoprograms}\CapScale AI setup"; Filename: "powershell.exe"; Parameters
 [UninstallDelete]
 ; also remove anything the app wrote next to itself, so no empty folder is left
 Type: filesandordirs; Name: "{app}"
-; the optional AI frame generation runtime (scripts\install-ai.ps1), about 4 GB
+; the optional AI frame generation runtime (scripts\install-ai.ps1), up to 4 GB
 Type: filesandordirs; Name: "{localappdata}\CapScale\ai"
 Type: dirifempty; Name: "{localappdata}\CapScale"
 
 [Run]
-Filename: "powershell.exe"; Parameters: "{#AiSetup}"; StatusMsg: "Downloading AI frame generation (about 4 GB)..."; Tasks: aiframes; Flags: waituntilterminated
+Filename: "powershell.exe"; Parameters: "{#AiSetup}"; StatusMsg: "Downloading AI frame generation..."; Tasks: aiframes; Flags: waituntilterminated
 Filename: "{app}\CapScale.exe"; Description: "Start CapScale"; Flags: nowait postinstall skipifsilent

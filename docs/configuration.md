@@ -27,7 +27,8 @@ checked every 20 ms.
 
 - `[output]`, `[params]`, `[passes]`, `[audio]` and `[hotkeys]` take effect at once.
 - A change to `[capture]` restarts capture, if it is running and `device` is set.
-- `backend` is only read when the window is created: it applies at the next start.
+- `backend` is only read when the window is created, and `[ai]` when the app starts:
+  they apply at the next start.
 - A file that does not parse, an unknown section, or a wrong key or value is
   reported on stderr as `config: ...` and that reload is skipped; the app keeps
   running on the previous values.
@@ -109,6 +110,14 @@ Values outside the range are clamped, not rejected.
 | `volume` | `1.0` | 0 to 2 | |
 | `delay_ms` | `0.0` | 0 to 500 | hold the sound back |
 
+### `[ai]`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `model` | `""` | which installed AI model to use: the name of a file in `%LOCALAPPDATA%\CapScale\ai`, without `.onnx`. Empty: the first one there |
+
+Read at start. See [Frame generation](frame-generation.md#engines-and-models).
+
 ### `[hotkeys]`
 
 Each line is `Key = "action"`. Keys are named as the window reports them: `F1` to
@@ -176,7 +185,7 @@ Flags stay on top of `config.toml` for the whole run, also after a live reload.
 | `%APPDATA%\CapScale\config.toml` | settings of the installed program |
 | `last_source.json`, next to `config.toml` | the device, size, rate and format started last |
 | `self-test.log`, next to `config.toml` | the error from a failed `--self-test` |
-| `%LOCALAPPDATA%\CapScale\ai\` | the optional AI download: `site\` (ONNX Runtime, CUDA, TensorRT), `rife_yuv420.onnx` (the model), `engines\` (what TensorRT prepared for this graphics card, per capture size) |
+| `%LOCALAPPDATA%\CapScale\ai\` | the optional AI download: `site\` (ONNX Runtime with TensorRT or DirectML), one `.onnx` file per model, `engines\` (what TensorRT prepared for this graphics card, per capture size) |
 
 Deleting `%LOCALAPPDATA%\CapScale\ai` removes the AI method. Deleting only its
 `engines` folder makes the model be prepared again on next use.

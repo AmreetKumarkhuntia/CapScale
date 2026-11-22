@@ -22,7 +22,8 @@ Start menu, plus the Desktop if you tick it.
 On the options page:
 
 - **Create a desktop shortcut**
-- **Download AI frame generation** (about 4 GB, NVIDIA RTX only, off by default).
+- **Download AI frame generation** (off by default; about 4 GB for an NVIDIA RTX card,
+  about 150 MB for any other).
   A window shows the download; press Enter when it says it is done. You can add it
   later with **CapScale AI setup** in the Start menu.
 
@@ -139,8 +140,8 @@ In `config.toml` these are `content_fps` (0 = auto) and `target_fps` (0 = off)
 under `[params]`.
 
 **AI method (optional).** The **AI frames (RIFE)** switch replaces the built-in
-method with the open-source [RIFE](https://github.com/hzwer/Practical-RIFE) model, run on an
-NVIDIA RTX card. It is a neural network trained on real video, where the built-in
+method with the open-source [RIFE](https://github.com/hzwer/Practical-RIFE) model, run on the
+graphics card. It is a neural network trained on real video, where the built-in
 method is a block search; try both on your game. It is not part of the app; install
 it once by ticking **Download AI frame generation** in the installer, or later from
 the **CapScale AI setup** Start-menu entry. From source, run
@@ -149,16 +150,22 @@ the **CapScale AI setup** Start-menu entry. From source, run
 scripts\install-ai.ps1
 ```
 
-Either way it puts about 4 GB (NVIDIA's CUDA and TensorRT libraries, ONNX Runtime and the
-model) in `%LOCALAPPDATA%\CapScale\ai`. Delete that folder to remove it. Until it
-is installed the switch is greyed out.
+Either way it looks at the graphics card and puts the model and one of two runtimes in
+`%LOCALAPPDATA%\CapScale\ai`. Delete that folder to remove it. Until it is installed
+the switch is greyed out.
 
-- On an RTX 5070 one generated 1080p frame takes 10 to 12 ms, so a real frame is
-  shown about 28 ms late at 30 to 60, against 17 ms for the built-in method.
-- A generated frame has to be ready within its slot. 30 to 60 and 30 to 90 fit; where
-  it does not fit (30 to 120, or a 60 fps game to 120), the built-in method is used
-  and the stats overlay says so.
-- The first use of a capture size prepares the model for the graphics card, which
+| Graphics card | Runtime | Download | One generated frame |
+|---|---|---|---|
+| NVIDIA RTX | ONNX Runtime with NVIDIA's CUDA and TensorRT | about 4 GB | 10 to 12 ms at 1080p (RTX 5070) |
+| any other DirectX 12 card (AMD, Intel, older NVIDIA) | ONNX Runtime with DirectML | about 150 MB | about 33 ms at 1080p, 13 ms at 720p. Measured on the same RTX 5070; no AMD or Intel card has been timed |
+
+- With TensorRT on an RTX 5070 a real frame is shown about 28 ms late at 30 to 60,
+  against 17 ms for the built-in method.
+- A generated frame has to be ready within its slot (16.7 ms for 30 to 60). With
+  TensorRT, 30 to 60 and 30 to 90 fit at 1080p. With DirectML at the speed above,
+  30 to 60 fits a 720p capture and not a 1080p one. Where it does not fit, the
+  built-in method is used and the stats overlay says so.
+- With TensorRT, the first use of a capture size prepares the model for the graphics card, which
   takes a minute or two (`install-ai.ps1` from source does this for 1080p). The built-in method
   runs meanwhile.
 - Where the picture is at rest (a menu, a still scene, a large HUD panel) the
@@ -169,7 +176,9 @@ is installed the switch is greyed out.
 - It handles the 4:2:0 video a capture card normally gives (MJPEG, NV12).
   `uv run python -m capscale.ai` times it and checks its output.
 
-In `config.toml` these are `ai_framegen` and `ai_still` under `[params]`.
+In `config.toml` these are `ai_framegen` and `ai_still` under `[params]`; `model` under
+`[ai]` picks between installed models. Engines and models are both tables that can be
+added to: see [Development](docs/development.md#adding-an-engine-or-a-model).
 
 **HUD zones.** A minimap that turns over a moving road cannot be interpolated
 cleanly. On the Frame rate tab, "+ box" or "+ circle" adds a zone; tick "Show
@@ -218,7 +227,7 @@ and the error shows in the stats overlay.
 | Pass | Shader | Notes |
 |---|---|---|
 | YUV to RGB | `yuv2rgb.wgsl` | NV12, YUY2 or planar; BT.601 / BT.709, limited or full range |
-| Frame generation | `luma.wgsl`, `flow.wgsl`, `interp.wgsl` | optional; motion search on a brightness pyramid, then a warp. The AI method runs before the pipeline instead (`ai.py`) |
+| Frame generation | `luma.wgsl`, `flow.wgsl`, `interp.wgsl` | optional; motion search on a brightness pyramid, then a warp. The AI method runs before the pipeline instead (`ai/`) |
 | Upscale | `easu.wgsl`, `lanczos3.wgsl`, `bilinear.wgsl` | switchable while running |
 | Sharpen | `rcas.wgsl` | FSR 1 RCAS |
 | Grade | `grade.wgsl` | in linear light: exposure, white balance, contrast, saturation, vibrance, lift / gamma / gain |
@@ -268,7 +277,13 @@ python/capscale/     Python package
     repeats.py          spot repeated frames (a 30 fps game in a 60 Hz signal)
     types.py            Mode, Frame
   audio.py            the card's sound to the speakers
-  ai.py               optional AI frame generation (RIFE)
+  ai/                 optional AI frame generation (RIFE)
+    engines.py          how a model runs on the card: TensorRT, DirectML
+    pack.py             the AI download and the models in it
+    model.py            one model for one frame size
+    framegen.py         the AI thread
+    check.py            time the real model and score its output
+    types.py            Planes, FrameModel, Engine
   config.py           config.toml load, save, live reload
   shaders/            one WGSL file per pass
 tests/rust/           cargo test

@@ -6,7 +6,9 @@
 - A capture card that offers MJPEG, NV12 or YUY2 video. Raw NV12 or YUY2 gives less
   delay and a cleaner picture than MJPEG.
 - A graphics card with DirectX 12 or Vulkan.
-- For the optional AI frame generation: an NVIDIA RTX card and about 4 GB of disk.
+- For the optional AI frame generation: an NVIDIA RTX card and about 4 GB of disk for
+  the fastest runtime. Any other DirectX 12 card (AMD, Intel) gets a slower one of
+  about 150 MB.
 
 ## Install and remove
 
@@ -19,7 +21,7 @@ Options on the installer's task page:
 | Option | Default | Does |
 |---|---|---|
 | Create a desktop shortcut | on | adds CapScale to the Desktop (it is always in the Start menu) |
-| Download AI frame generation | off | fetches the 4 GB AI runtime; a console window shows the download, press Enter when it says it is done |
+| Download AI frame generation | off | fetches the AI runtime for your graphics card (about 4 GB for NVIDIA RTX, about 150 MB otherwise); a console window shows the download, press Enter when it says it is done |
 
 The AI download can be added later from **CapScale AI setup** in the Start menu.
 
@@ -152,11 +154,14 @@ generated frames show the real picture. Up to eight zones; they are saved with
 **AI method.** A neural network trained on real video, where the built-in method
 is a block search. Try both on your game. Things to know:
 
-- The first use of a capture size prepares the model for your graphics card, which
+- On an NVIDIA RTX card, the first use of a capture size prepares the model for it, which
   takes a minute or two. The built-in method runs meanwhile.
 - A generated frame must be ready within its time slot. 30 to 60 and 30 to 90 fit
   on an RTX 5070; where it does not fit (30 to 120, or a 60 fps game to 120) the
   built-in method is used and the stats overlay says so.
+- On other cards (AMD, Intel) the model runs through DirectML, which is slower: at the
+  speed measured so far, 30 to 60 fits a 720p capture and not a 1080p one. No AMD or
+  Intel card has been timed; the stats overlay shows what yours does.
 - Small still things on top of motion (a crosshair, a minimap) are drawn by the
   model and can look a little soft. Put a HUD zone over them.
 

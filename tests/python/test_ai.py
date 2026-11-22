@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from capscale import ai
+from capscale.ai import engines, pack
 
 PERIOD = 0.04
 
@@ -125,6 +126,27 @@ def test_hud_zones_keep_the_real_picture():
     assert (y[:20, :20] == 200).all() and (u[:10, :10] == 200).all()
     assert y[30, 30] == 200 and y[21, 21] == 0 and u[15, 15] == 200
     assert y[30, 5] == 0 and y[5, 30] == 0
+
+
+def test_the_engine_is_the_first_one_the_runtime_offers():
+    nvidia = ["TensorrtExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"]
+    assert engines.pick(nvidia).provider == "TensorrtExecutionProvider"
+    assert engines.pick(["DmlExecutionProvider", "CPUExecutionProvider"]).provider == "DmlExecutionProvider"
+    with pytest.raises(RuntimeError, match="no engine"):
+        engines.pick(["CPUExecutionProvider"])
+
+
+def test_models_are_the_onnx_files_in_the_pack(tmp_path, monkeypatch):
+    monkeypatch.setattr(pack, "PACK", tmp_path)
+    with pytest.raises(FileNotFoundError, match="none"):
+        pack.model_path()
+    for name in ("rife_yuv420.onnx", "rife_v4.15_lite.onnx", "notes.txt"):
+        (tmp_path / name).touch()
+    assert list(pack.models()) == ["rife_v4.15_lite", "rife_yuv420"]
+    assert pack.model_path() == tmp_path / "rife_v4.15_lite.onnx"
+    assert pack.model_path("rife_yuv420") == tmp_path / "rife_yuv420.onnx"
+    with pytest.raises(FileNotFoundError, match="rife_v4.15_lite, rife_yuv420"):
+        pack.model_path("gmfss")
 
 
 @pytest.mark.skipif(not ai.available(), reason="AI runtime not installed (scripts/install-ai.ps1)")

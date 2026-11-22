@@ -23,9 +23,10 @@ Keys (on the picture window)
 Changes apply at once. Press "Save to config.toml" to keep them for next time.
 Settings live in %APPDATA%\CapScale.
 
-AI frame generation (optional, NVIDIA RTX only)
+AI frame generation (optional)
   If you ticked it during setup, it is ready: tick "AI frames (RIFE)" on the
-  Frame rate tab. To add it later, run "CapScale AI setup" from the Start menu
-  (about 4 GB download), then restart CapScale.
+  Frame rate tab. To add it later, run "CapScale AI setup" from the Start menu,
+  then restart CapScale. The download is about 4 GB for an NVIDIA RTX card and
+  about 150 MB for any other (AMD, Intel), where it runs slower.
 
 The same guide is on the "Getting started" tab inside the app.

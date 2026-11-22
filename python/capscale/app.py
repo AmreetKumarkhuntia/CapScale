@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 import sys
@@ -272,7 +273,7 @@ def main(argv: list[str] | None = None) -> int:
 
     out = _output_from(cfg, args)
     r = Renderer(*out["out_size"], fullscreen=out["fullscreen"], vsync=out["vsync"], backend=out["backend"])
-    gen = ai.FrameGen(r) if ai.available() else None
+    gen = ai.FrameGen(r, functools.partial(ai.Model, name=cfg["ai"]["model"])) if ai.available() else None
     r.set_params(ai_available=gen is not None)
     _apply(r, cfg, args)
     watcher = config.Watcher(cfg_path)

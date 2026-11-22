@@ -23,6 +23,9 @@ F8 = "toggle:audio"
 F11 = "toggle:fullscreen"
 # other actions: "quit", "save" (write the current settings to this file)
 
+[ai]
+model = ""           # AI frame generation: a model install-ai.ps1 put in %LOCALAPPDATA%\CapScale\ai; empty: the first one there. Used at the next start
+
 [output]
 width = 2560            # 0 x 0: fit the display
 height = 1440

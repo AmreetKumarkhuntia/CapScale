@@ -1,22 +1,57 @@
-# Installs the optional AI frame generation: the open-source RIFE model (MIT) and
-# what runs it on an NVIDIA card (ONNX Runtime, CUDA, TensorRT).
+# Installs the optional AI frame generation: an open-source model (RIFE, MIT) and
+# the runtime that runs it on the graphics card, chosen from the card:
 #
-# About 4 GB, in %LOCALAPPDATA%\CapScale\ai. The app, installed or run from
-# source, finds it there at its next start. To remove it, delete that folder.
+#   NVIDIA RTX       ONNX Runtime with CUDA and TensorRT. About 4 GB, the fastest.
+#   any other card   ONNX Runtime with DirectML (AMD, Intel, older NVIDIA). Small, slower.
+#
+# In %LOCALAPPDATA%\CapScale\ai. The app, installed or run from source, finds it
+# there at its next start. To remove it, delete that folder.
 # Run from the repo, or by the CapScale installer (its "AI frame generation" box),
 # which copies this script and build_ai_model.py next to the app.
-# Needs: an NVIDIA RTX card with a current driver. Fetches uv itself if it is missing.
-param([switch]$Pause)
+# Needs: a DirectX 12 graphics card with a current driver. Fetches uv itself if it is missing.
+#
+#   -Runtime nvidia|directml   instead of choosing from the graphics card
+#   -Model <name>              another entry of $models; set [ai] model in config.toml to use it
+param(
+    [switch]$Pause,
+    [ValidateSet("auto", "nvidia", "directml")][string]$Runtime = "auto",
+    [string]$Model = "rife_v4.15_lite"
+)
 $ErrorActionPreference = "Stop"
 trap {
     Write-Host "AI setup failed: $_" -ForegroundColor Red
     if ($Pause) { Read-Host "Press Enter to close" }
     break
 }
+
+# What runs a model, by name. Versions that were tested together: onnxruntime-gpu
+# names the CUDA libraries it was built for, and TensorRT has to be the 10.x line for
+# CUDA 13 to match it. A new one also needs an entry in python\capscale\ai\engines.py.
+$runtimes = @{
+    nvidia   = "onnxruntime-gpu[cuda,cudnn]==1.32.0", "tensorrt-cu13-libs==10.16.1.11"
+    directml = "onnxruntime-directml==1.24.4"
+}
+# The models, by name: an archive, and the file in it that build_ai_model.py wraps.
+# That has to be one that takes any frame size, with one input and one output
+# (vs-mlrt's rife_v2 layout).
+$models = @{
+    "rife_v4.15_lite" = @{
+        url  = "https://github.com/AmusementClub/vs-mlrt/releases/download/external-models/rife_v4.15_lite.7z"
+        file = "rife_v2\rife_v4.15_lite.onnx"
+    }
+}
+$source = $models[$Model]
+if (-not $source) { throw "no model called '$Model'. There is: $($models.Keys -join ', ')" }
+
+if ($Runtime -eq "auto") {
+    $cards = @((Get-CimInstance Win32_VideoController).Name)
+    $Runtime = if ($cards -match "NVIDIA.*RTX") { "nvidia" } else { "directml" }
+    Write-Host "Graphics: $($cards -join ', '). Installing the $Runtime runtime."
+}
+
 $repo = Split-Path -Parent $PSScriptRoot
 $pack = Join-Path $env:LOCALAPPDATA "CapScale\ai"
 $work = Join-Path $env:TEMP "capscale-ai"
-$model = "rife_v4.15_lite"
 New-Item -ItemType Directory -Force $pack, $work | Out-Null
 # downloads and the Python that runs build_ai_model.py live in $work, so deleting it leaves nothing behind
 $env:UV_CACHE_DIR = "$work\uv-cache"
@@ -42,32 +77,32 @@ if (-not $uv) {
 }
 Step "python" { & $uv python install 3.12 }
 
-# Versions that were tested together. onnxruntime-gpu names the CUDA libraries it
-# was built for; TensorRT has to be the 10.x line for CUDA 13 to match it.
-Step "runtime (the large download)" {
-    & $uv pip install --python 3.12 --target "$pack\site" `
-        "onnxruntime-gpu[cuda,cudnn]==1.32.0" "tensorrt-cu13-libs==10.16.1.11"
+# Both runtimes are a package called onnxruntime, so one cannot be installed over the other
+$had = if (Test-Path "$pack\site\tensorrt_libs") { "nvidia" } elseif (Test-Path "$pack\site\onnxruntime") { "directml" }
+if ($had -and $had -ne $Runtime) {
+    Remove-Item -Recurse -Force "$pack\site", "$pack\engines" -ErrorAction SilentlyContinue
 }
+$packages = $runtimes[$Runtime]
+Step "runtime ($Runtime)" { & $uv pip install --python 3.12 --target "$pack\site" $packages }
 
-Step "model" {
-    curl.exe -sSL --fail -o "$work\$model.7z" `
-        "https://github.com/AmusementClub/vs-mlrt/releases/download/external-models/$model.7z"
-}
+Step "model ($Model)" { curl.exe -sSL --fail -o "$work\model.7z" $source.url }
 # Windows' own tar reads 7z archives
-Step "unpack" { & "$env:SystemRoot\System32\tar.exe" -xf "$work\$model.7z" -C $work }
+Step "unpack" { & "$env:SystemRoot\System32\tar.exe" -xf "$work\model.7z" -C $work }
 
-# rife_v2 is the layout that takes any frame size; the wrapper makes it take the card's YUV frames
+# the wrapper makes the model take the card's YUV frames
 Step "prepare the model" {
     # what TensorRT prepared from an earlier model must not be used for the new one
     if (Test-Path "$pack\engines") { Remove-Item -Recurse -Force "$pack\engines" }
     & $uv run --no-project --python 3.12 --with onnx python "$PSScriptRoot\build_ai_model.py" `
-        "$work\rife_v2\$model.onnx" "$pack\rife_yuv420.onnx"
+        "$work\$($source.file)" "$pack\$Model.onnx"
 }
+# this model's file name from before models had names
+if ($Model -eq "rife_v4.15_lite") { Remove-Item "$pack\rife_yuv420.onnx" -ErrorAction SilentlyContinue }
 
-# Loads it, times it and checks its output. The first load prepares the model for
-# this graphics card at 1080p, which takes a minute or two and is then kept.
+# Loads it, times it and checks its output. With TensorRT the first load prepares the
+# model for this graphics card at 1080p, which takes a minute or two and is then kept.
 if (Test-Path "$repo\.venv\Scripts\python.exe") {
-    Step "check" { & "$repo\.venv\Scripts\python.exe" -m capscale.ai 1920x1080 }
+    Step "check" { & "$repo\.venv\Scripts\python.exe" -m capscale.ai 1920x1080 $Model }
 }
 Remove-Item -Recurse -Force $work
 "Installed in $pack. Restart CapScale and tick AI frames (RIFE) on the settings window's Frame rate tab."

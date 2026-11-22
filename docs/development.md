@@ -47,7 +47,7 @@ python/capscale/      Python package
   app.py                command line and main loop
   capture/              devices, stream, test pattern, repeat detection
   audio.py              the card's sound to the speakers
-  ai.py                 optional AI frame generation (RIFE)
+  ai/                   optional AI frame generation: engines, models, the AI thread
   config.py             config.toml load, save, live reload
   shaders/              one WGSL file per pass
 tests/rust/           cargo test
@@ -95,7 +95,7 @@ Neither opens a window or needs a capture card.
 | `test_devices.py` | DirectShow and V4L2 mode parsing, `best_mode` |
 | `test_repeats.py` | repeat detection: 30 and 60 fps games, noise, still pictures, rhythm slips, forced rates, every frame layout |
 | `test_audio.py` | matching the card's sound input by name, the delay line |
-| `test_ai.py` | the AI thread's ordering, spacing and fallbacks with a stand-in model; HUD zones; the real model where it is installed |
+| `test_ai.py` | the AI thread's ordering, spacing and fallbacks with a stand-in model; HUD zones; which engine and which model are picked; the real model where it is installed |
 
 ## Working on shaders
 
@@ -107,23 +107,45 @@ pass touches are in [Render pipeline](pipeline.md#editing-a-shader).
 ## AI frame generation from source
 
 ```
-scripts\install-ai.ps1
+scripts\install-ai.ps1 [-Runtime nvidia|directml] [-Model <name>]
 ```
 
 Installs into `%LOCALAPPDATA%\CapScale\ai`, the same place the installed program
 uses. Steps:
 
 1. Fetches uv if it is missing, and a Python 3.12 for the build step.
-2. Installs the pinned runtime (`onnxruntime-gpu[cuda,cudnn]` and
-   `tensorrt-cu13-libs`) into `ai\site`. This is the large download.
-3. Downloads the RIFE model and wraps it with `scripts\build_ai_model.py`, so it
-   takes and returns 8-bit YUV planes, as `ai\rife_yuv420.onnx`.
-4. If the repo has a `.venv`, runs `python -m capscale.ai 1920x1080` in it, which
-   prepares the model for this graphics card at 1080p and checks its output.
+2. Picks the runtime from the graphics card's name, `nvidia` for an NVIDIA RTX card
+   and `directml` for anything else, unless `-Runtime` says. Installs its pinned
+   packages into `ai\site`: `onnxruntime-gpu[cuda,cudnn]` and `tensorrt-cu13-libs`
+   (the large download), or `onnxruntime-directml`. Going from one to the other
+   replaces `ai\site`.
+3. Downloads the model and wraps it with `scripts\build_ai_model.py`, so it
+   takes and returns 8-bit YUV planes, as `ai\<model>.onnx`.
+4. If the repo has a `.venv`, runs `python -m capscale.ai 1920x1080 <model>` in it,
+   which loads the model on this graphics card (TensorRT prepares it for 1080p
+   first) and checks its output.
 
-The two runtime versions are pinned because they were tested together; change
+The two NVIDIA versions are pinned because they were tested together; change
 them as a pair. After rebuilding a model by hand, delete `ai\engines`, or what
 TensorRT prepared from the old model is used again.
+
+The script and the app both find the folder through `LOCALAPPDATA`. Setting that
+variable to another folder for one shell tries the other runtime without touching
+the installed one.
+
+### Adding an engine or a model
+
+- **An engine**, another way to run models on a card: its packages as a row of
+  `$runtimes` in `install-ai.ps1`, and an `Engine` in `ENGINES` in
+  `python/capscale/ai/engines.py` with ONNX Runtime's name for it and its options.
+  The first entry the installed runtime offers is the one used.
+- **A model**: a row of `$models` in `install-ai.ps1` (the archive, and the file in
+  it), then `scripts\install-ai.ps1 -Model <name>` and `model = "<name>"` under
+  `[ai]` in `config.toml`. `build_ai_model.py` wraps a model that has one input (two
+  RGB pictures and the moment, seven channels) and one output, at any frame size:
+  the `rife_v2` files of the vs-mlrt releases. A model of another shape needs its
+  own wrapper giving the same inputs and outputs, or its own class in place of
+  `ai.Model`: `FrameGen` takes anything that follows `FrameModel` in `ai/types.py`.
 
 ## Building the installer
 

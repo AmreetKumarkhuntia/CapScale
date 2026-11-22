@@ -178,7 +178,12 @@ something to Python, the bindings in `python.rs`.
 | `capture/repeats.py` | `Cadence`: spot repeated frames |
 | `capture/types.py` | `Mode`, `Frame` |
 | `audio.py` | `Audio`: the card's sound to the speakers, `DelayLine` |
-| `ai.py` | `Model` (RIFE), `FrameGen` (the AI thread) |
+| `ai/engines.py` | `ENGINES` (TensorRT, DirectML), `session`: a model file loaded on the graphics card |
+| `ai/pack.py` | the AI download: `PACK`, `available`, `models` |
+| `ai/model.py` | `Model`: one installed model for one frame size |
+| `ai/framegen.py` | `FrameGen` (the AI thread), `planes_of`, `keep_zones` |
+| `ai/check.py` | times the real model and scores its output (`python -m capscale.ai`) |
+| `ai/types.py` | `Planes`, `FrameModel`, `Engine` |
 | `shaders/` | one WGSL file per pass, shipped as package data so they can be edited in place |
 
 ### Around them

@@ -16,6 +16,7 @@ DEFAULTS: dict = {
     "params": {},
     "passes": {},
     "audio": {"enabled": True, "volume": 1.0, "delay_ms": 0.0},
+    "ai": {"model": ""},
     "hotkeys": {
         "Escape": "stop",
         "F1": "toggle:panel",
