@@ -159,10 +159,11 @@ is a block search. Try both on your game. Things to know:
 
 - On an NVIDIA RTX card, the first use of a capture size prepares the model for it, which
   takes a minute or two. The built-in method runs meanwhile.
-- A generated frame must be ready within its time slot. With RIFE, 30 to 60 and 30 to 90
-  fit on an RTX 5070; where it does not fit (30 to 120, or a 60 fps game to 120) the
-  built-in method is used and the stats overlay says so. NVIDIA Low and Medium are quick
-  enough for those too; NVIDIA High needs a faster card than an RTX 5070.
+- A generated frame should be ready within its time slot. With RIFE, 30 to 60 and 30 to 90
+  fit on an RTX 5070. The model you choose is the one used either way: where it does not
+  fit (30 to 120, or a 60 fps game to 120) some generated frames are left out and the
+  stats overlay says so. NVIDIA Low and Medium are quick enough for those too; NVIDIA
+  High needs a faster card than an RTX 5070.
 - With **AI upscale first** on, frames are generated from the enlarged picture, which
   takes more than twice as long per frame at 1440p (NVIDIA Low 7 ms, Medium 12 ms on an
   RTX 5070). Both still fit 30 to 60 there; for 30 to 120 use NVIDIA Low.
@@ -225,9 +226,9 @@ Escape close   F1 settings   F3 split   audio 54 ms
 | Method offers only Built-in, AI upscale is greyed out | the AI download is not installed, or for AI upscale the card is not an NVIDIA RTX | run **CapScale AI setup**, then restart |
 | No NVIDIA choices after an update | the AI download is from before they existed | run **CapScale AI setup** again; it adds them |
 | `AI frames: preparing the model` | first use of this capture size | wait a minute or two |
-| `AI frames: N ms each, too slow for this rate - built-in used` | the model cannot finish a frame in its slot | lower the target, or pick a faster model. With AI upscale on, frames are generated at the enlarged size, where RIFE is too slow on an RTX 5070: NVIDIA Low or Medium fit. The built-in method, used meanwhile, tears fast-moving things |
+| `AI frames: N ms each, too slow for this rate: some are left out` | the model cannot finish a frame in its slot. It stays the one used; frames it has no time for are skipped | lower the target, or pick a faster model. With AI upscale on, frames are generated at the enlarged size: at 1440p on an RTX 5070 RIFE takes 18 ms, just over the slot of 30 to 60, and NVIDIA Low or Medium fit |
 | `AI frames: <format> video is not handled - built-in used` | the card delivers YUY2 or 4:2:2 | the AI method takes 4:2:0 only (MJPEG, NV12) |
-| `AI upscale: N ms a frame, too slow for this rate - the app's own upscaler is used` | the level cannot finish a frame before the next is due. It is tried again by itself after a while | pick a lower level, or a lighter frame generation model |
+| `AI upscale: N ms a frame, not keeping up: frames are left out` | the level cannot finish a frame before the next is due (or capture has just caught up after a stall, which passes in a second or two). It stays the one used | pick a lower level, or a lighter frame generation model |
 | `AI upscale: the picture is not being enlarged at this size` | the window is no larger than the capture | nothing to do: there is nothing to upscale |
 | Card falls back to slow, compressed modes | weak USB port or cable | a rear motherboard port and the cable that came with the card |
 | The app does not start from the shortcut | a start-up failure | the error is shown in a message box; from source, run `uv run capscale` in a console to see the full output |

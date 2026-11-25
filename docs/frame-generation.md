@@ -194,7 +194,7 @@ treats the two alike.
 |---|---|
 | `nvidia-low` | 3 ms |
 | `nvidia-medium` | 5 ms |
-| `nvidia-high` | 18 ms: over the 16.7 ms slot of 30 to 60, so on this card the built-in method is used instead |
+| `nvidia-high` | 18 ms: over the 16.7 ms slot of 30 to 60, so on this card some generated frames are left out |
 
 With an [AI upscaler](pipeline.md#ai-upscaling-ahead-of-the-passes) chosen, the frames
 arrive already enlarged and are generated at that size, which costs more than twice
@@ -248,9 +248,13 @@ caller shows the frame itself so the built-in method takes over, when:
 | Reason | Status line |
 |---|---|
 | the model for this size is still loading | `AI frames: preparing the model (a minute or two the first time)` |
-| one generated frame takes longer than its slot | `AI frames: N ms each, too slow for this rate - built-in used` |
 | the frame is not 4:2:0 (`i420` or `nv12`, even size) | `AI frames: <fmt> video is not handled - built-in used` |
 | the model failed to load or run | `AI frames not available: ...` / `AI frames stopped: ...` |
+
+The model chosen is the one used, whatever it takes. One that needs longer than its
+slot falls behind the game; when the next game frame is already waiting, that frame is
+shown without the generated ones before it. The status line then reads `AI frames: N ms
+each, too slow for this rate: some are left out`.
 
 Otherwise the frame is queued. For each one the thread:
 

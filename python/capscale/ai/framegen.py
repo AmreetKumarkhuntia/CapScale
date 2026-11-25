@@ -52,9 +52,10 @@ def _sleep_until(moment: float) -> None:
 
 class FrameGen(threading.Thread):
     """Takes the game's frames; shows each one after the generated frames that lead up to it.
-    The model is the one chosen in the settings window (the renderer's `ai_model`). It
-    starts afresh when that, the frame size or the AI upscaler changes: a model that was
-    too slow beside one upscaler may not be beside another."""
+    The model is the one chosen in the settings window (the renderer's `ai_model`), and
+    it is used whatever it takes: one too slow for the rate leaves out the generated
+    frames it has no time for (see `_show`), and the note in the stats says so. It starts
+    afresh when the choice or the frame size changes."""
 
     def __init__(self, renderer, model=frame_model):
         super().__init__(daemon=True, name="ai")
@@ -65,8 +66,6 @@ class FrameGen(threading.Thread):
         self.failed = False
         self.status = ""
         self.older: tuple[Planes, float] | None = None
-        self.rates: dict[str, float] = {}  # seconds per pixel each model has been found to take
-        self.guess = self.slot = 0.0
         self.start()
 
     def submit(self, data, fmt, width, height, full_range, matrix, decode_ms, multiple: int, period: float) -> bool:
@@ -74,27 +73,19 @@ class FrameGen(threading.Thread):
         seconds. False: not taken, and the caller shows it."""
         if not self.is_alive():
             return False
-        self.slot = period / multiple
-        key = (width, height, self.renderer.ai_model, self.renderer.ai_upscale)
+        key = (width, height, self.renderer.ai_model)
         if self.key != key:
-            self.key, self.model, self.failed, self.guess = key, None, False, 0.0
-            self.jobs.put(("load", key))
-        if self.guess > self.slot:
-            return False
-        if self.guess:  # the rate has changed since it was judged too slow for this size
-            self.guess = 0.0
+            self.key, self.model, self.failed = key, None, False
             self.jobs.put(("load", key))
         model = self.model
         if model is None or self.failed:
-            return False
-        if model.took > period / multiple:
-            self.status = f"AI frames: {model.took * 1e3:.0f} ms each, too slow for this rate - built-in used"
             return False
         planes = planes_of(data, fmt, width, height)
         if planes is None:
             self.status = f"AI frames: {fmt} video is not handled - built-in used"
             return False
-        self.status = f"AI frames: {model.took * 1e3:.0f} ms each"
+        slow = ", too slow for this rate: some are left out" if model.took > period / multiple else ""
+        self.status = f"AI frames: {model.took * 1e3:.0f} ms each{slow}"
         self.jobs.put((model, planes, width, height, full_range, matrix, decode_ms, multiple, period, time.perf_counter()))
         return True
 
@@ -110,15 +101,7 @@ class FrameGen(threading.Thread):
                 self._show(*job)
 
     def _load(self, key) -> None:
-        width, height, name = key[:3]
-        # Known from another frame size (the AI upscaler has just come on, say): preparing
-        # the model for this one can take minutes, and would be for nothing.
-        guess = self.rates.get(name, 0.0) * width * height
-        if guess > self.slot:
-            if self.key == key:
-                self.guess = guess
-                self.status = f"AI frames: about {guess * 1e3:.0f} ms each at this size, too slow for this rate - built-in used"
-            return
+        width, height, name = key
         self.status = "AI frames: preparing the model (a minute or two the first time)"
         try:
             model = self._new_model(width, height, name)
@@ -127,7 +110,6 @@ class FrameGen(threading.Thread):
                 self.failed = True
                 self.status = f"AI frames not available: {str(e).splitlines()[0][:120]}"
             return
-        self.rates[name] = model.took / (width * height)
         if self.key == key:
             self.model, self.status = model, "AI frames: ready"
 

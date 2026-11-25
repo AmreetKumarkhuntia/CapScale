@@ -189,9 +189,9 @@ each frame to NVIDIA's video upscaler before the steps above: it enlarges the fr
 the size shown and removes compression noise as it does, which suits a card that sends
 MJPEG. Seven levels, from Low (4 ms a frame for 1080p to 1440p on an RTX 5070) to
 Streaming Ultra (11 ms); it comes with the same download. Each of the game's real
-frames goes through it, and frame generation then works on the enlarged frames. A
-level has to fit the rate: where it does not, the app's own upscaler is used and the
-stats overlay says so. In `config.toml` it is `ai_upscale` under `[params]`.
+frames goes through it, and frame generation then works on the enlarged frames. The
+level chosen is the one used: where it is too slow for the rate, frames are left out
+and the stats overlay says so. In `config.toml` it is `ai_upscale` under `[params]`.
 
 **HUD zones.** A minimap that turns over a moving road cannot be interpolated
 cleanly. On the Frame rate tab, "+ box" or "+ circle" adds a zone; tick "Show

@@ -77,16 +77,18 @@ def test_frames_are_spread_evenly_over_the_game_frame():
     assert len(gaps) == 3 and np.allclose(gaps, PERIOD / 4, atol=0.004)
 
 
-def test_a_model_too_slow_for_the_rate_is_not_used():
+def test_a_model_too_slow_for_the_rate_is_still_the_one_used():
     class Slow(Model):
         took = PERIOD
 
     renderer = Renderer()
     gen = started(renderer, Slow)
-    assert not gen.submit(frame(10), "i420", 4, 4, None, None, 0.0, 2, PERIOD)
-    assert "too slow" in gen.status
+    for value in (10, 20):
+        assert gen.submit(frame(value), "i420", 4, 4, None, None, 0.0, 2, PERIOD)
+        time.sleep(PERIOD)
+    assert "too slow for this rate" in gen.status
     gen.close()
-    assert renderer.shown == []
+    assert renderer.shown == [10, 15, 20]
 
 
 def test_a_failing_model_still_lets_the_real_frame_through():
@@ -124,29 +126,6 @@ def test_choosing_another_model_loads_it():
         time.sleep(0.002)
     gen.close()
     assert gen.model.name == "nvidia-medium"
-
-
-def test_a_model_known_to_be_too_slow_for_a_larger_frame_is_not_prepared_for_it():
-    made = []
-
-    class Counted(Model):
-        def __init__(self, width, height, name=""):
-            made.append(width)
-
-    def settled(gen):
-        deadline = time.monotonic() + 2
-        while gen.model is None and not gen.guess and time.monotonic() < deadline:
-            time.sleep(0.002)
-
-    gen = started(Renderer(), Counted)  # 1 ms for 4x4: 64 ms for 32x32, against a slot of 20
-    assert not gen.submit(frame(0), "i420", 32, 32, None, None, 0.0, 2, PERIOD)
-    settled(gen)
-    assert not gen.submit(frame(0), "i420", 32, 32, None, None, 0.0, 2, PERIOD)
-    assert made == [4] and gen.model is None and "about 64 ms each at this size, too slow" in gen.status
-    assert not gen.submit(frame(0), "i420", 32, 32, None, None, 0.0, 2, 1.0)  # a slower game: it fits now
-    settled(gen)
-    gen.close()
-    assert made == [4, 32] and gen.model is not None
 
 
 class Scaler:
@@ -195,38 +174,22 @@ def test_without_an_upscaler_chosen_frames_go_straight_through():
     assert shown == [(10, 4, None), (20, 4, None), (30, 4, None)] and up.status == ""
 
 
-class Stalled(Scaler):
-    def enlarge(self, planes, matrix):
-        time.sleep(0.2)  # many times the gap between the frames below
-        return super().enlarge(planes, matrix)
+def test_an_upscaler_too_slow_for_the_rate_is_still_the_one_used_and_leaves_frames_out():
+    class Stalled(Scaler):
+        def enlarge(self, planes, matrix):
+            time.sleep(0.2)  # many times the gap between the frames below
+            return super().enlarge(planes, matrix)
 
-
-def test_frames_that_pile_up_behind_the_upscaler_are_left_out_not_shown_late():
     renderer = Renderer()
     renderer.ai_upscale = "nvidia-high"
     up, take, shown = upscaling(renderer, Stalled)
-    for value in (10, 20, 30, 40, 50, 60):  # capture catching up after a stall: a burst
+    for value in (10, 20, 30, 40, 50, 60):
         take(value)
     up.jobs.join()
-    assert shown == [(10, 8, "bt601"), (20, 8, "bt601"), (30, 8, "bt601")] and "too slow" not in up.status
-    take(70)  # and it carries on
+    assert shown == [(10, 8, "bt601"), (20, 8, "bt601"), (30, 8, "bt601")]  # the rest would have been shown late
+    take(70)
     up.close()
-    assert shown[-1] == (70, 8, "bt601")
-
-
-def test_an_upscaler_too_slow_for_the_rate_stands_down_and_is_tried_again(monkeypatch):
-    monkeypatch.setattr(ai.upscale, "SPELL", 0.05)
-    renderer = Renderer()
-    renderer.ai_upscale = "nvidia-high"
-    up, take, shown = upscaling(renderer, Stalled)
-    for value in range(1, 31):  # frames kept piling up for longer than that
-        take(value)
-    assert shown[-1][:2] == (30, 4) and "too slow" in up.status
-    assert [value for value, _, _ in shown] == sorted(value for value, _, _ in shown)
-    up.until = 0.0  # the rest is over
-    take(31)
-    up.close()
-    assert shown[-1] == (31, 8, "bt601")
+    assert shown[-1] == (70, 8, "bt601") and "not keeping up" in up.status
 
 
 def test_a_failing_upscaler_still_lets_the_frame_through():

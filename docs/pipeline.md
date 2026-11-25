@@ -64,10 +64,14 @@ A frame is handed on as it is, and the pass chain does the enlarging, when:
 | Reason | Status line |
 |---|---|
 | the model for this size and level is still loading | `AI upscale: preparing the model` |
-| 30 frames in a row took longer than the gap between frames | `AI upscale: N ms a frame, too slow for this rate - the app's own upscaler is used`. It is tried again after 10 seconds, then 20, doubling up to five minutes; changing the level, the size or the frame generation settings starts afresh |
 | the output is no larger than the frame | `AI upscale: the picture is not being enlarged at this size` |
 | the frame is not 4:2:0 | `AI upscale: <fmt> video is not handled` |
 | the model failed to load or run | `AI upscale not available: ...` / `AI upscale stopped: ...` |
+
+The level chosen is the one used, whatever it takes. Where it has fallen behind (it is
+too slow for the rate, or capture is catching up after a stall), a frame that would
+wait behind two others is left out instead of being shown late, and the status line
+reads `AI upscale: N ms a frame, not keeping up: frames are left out`.
 
 Frames are handed on in the order they came: one that skips the upscaler waits for
 those still in it. The time a frame spends there is added to its `decode_ms`.
