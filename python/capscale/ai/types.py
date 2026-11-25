@@ -23,6 +23,6 @@ class Engine(NamedTuple):
     """One way of running a model on the graphics card: an ONNX Runtime provider."""
 
     provider: str
-    options: Callable[[], dict]
+    options: Callable[[str], dict]  # given a name for the model at one frame size
     also: tuple[str, ...] = ()  # providers behind it, for the operations it does not take
     prepare: Callable[[object], None] = lambda session_options: None

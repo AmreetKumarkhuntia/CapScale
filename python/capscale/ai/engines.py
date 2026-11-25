@@ -13,8 +13,16 @@ from .pack import PACK, SITE
 from .types import Engine
 
 
-def _tensorrt() -> dict:
-    return {"trt_fp16_enable": True, "trt_engine_cache_enable": True, "trt_engine_cache_path": str(PACK / "engines")}
+def _tensorrt(tag: str) -> dict:
+    # What TensorRT prepares fits one frame size only, and it names the file after the
+    # model alone: without the prefix a second size finds the first one's file, cannot
+    # use it, and the model then runs many times slower without TensorRT.
+    return {
+        "trt_fp16_enable": True,
+        "trt_engine_cache_enable": True,
+        "trt_engine_cache_path": str(PACK / "engines"),
+        "trt_engine_cache_prefix": tag,
+    }
 
 
 def _no_mem_pattern(session_options) -> None:
@@ -25,7 +33,7 @@ def _no_mem_pattern(session_options) -> None:
 ENGINES = (
     Engine("TensorrtExecutionProvider", _tensorrt, also=("CUDAExecutionProvider",)),  # NVIDIA RTX
     # any DirectX 12 card; high_performance: the fast card of a laptop that has two
-    Engine("DmlExecutionProvider", lambda: {"performance_preference": "high_performance"}, prepare=_no_mem_pattern),
+    Engine("DmlExecutionProvider", lambda tag: {"performance_preference": "high_performance"}, prepare=_no_mem_pattern),
 )
 
 
@@ -59,7 +67,8 @@ def session(path, sizes: dict[str, int]):
     for name, value in sizes.items():
         options.add_free_dimension_override_by_name(name, value)
     engine.prepare(options)
-    made = ort.InferenceSession(str(path), options, providers=[(engine.provider, engine.options()), *engine.also])
+    tag = f"{path.stem}_{sizes['w']}x{sizes['h']}"
+    made = ort.InferenceSession(str(path), options, providers=[(engine.provider, engine.options(tag)), *engine.also])
     if made.get_providers()[0] != engine.provider:
         raise RuntimeError("the AI runtime could not start on the graphics card")
     return made
