@@ -195,37 +195,38 @@ def test_without_an_upscaler_chosen_frames_go_straight_through():
     assert shown == [(10, 4, None), (20, 4, None), (30, 4, None)] and up.status == ""
 
 
-def test_an_upscaler_too_slow_for_the_rate_stands_down_and_is_tried_again(monkeypatch):
-    class Slow(Scaler):
-        took = 1.0
-
-    monkeypatch.setattr(ai.upscale, "SLOW_FRAMES", 3)
-    renderer = Renderer()
-    renderer.ai_upscale = "nvidia-high"
-    up, take, shown = upscaling(renderer, Slow)
-    for value in (10, 20, 30, 40):
-        take(value)
-    assert [width for _, width, _ in shown] == [8, 8, 8, 4] and "too slow" in up.status
-    up.until = 0.0  # the rest is over
-    take(50)
-    up.close()
-    assert shown[-1] == (50, 8, "bt601")
+class Stalled(Scaler):
+    def enlarge(self, planes, matrix):
+        time.sleep(0.2)  # many times the gap between the frames below
+        return super().enlarge(planes, matrix)
 
 
-def test_an_upscaler_that_frames_pile_up_behind_stands_down_at_once():
-    class Stalled(Scaler):
-        def enlarge(self, planes, matrix):
-            time.sleep(0.05)  # ten times the gap between frames, though `took` does not say so yet
-            return super().enlarge(planes, matrix)
-
+def test_frames_that_pile_up_behind_the_upscaler_are_left_out_not_shown_late():
     renderer = Renderer()
     renderer.ai_upscale = "nvidia-high"
     up, take, shown = upscaling(renderer, Stalled)
-    for value in (10, 20, 30, 40, 50, 60):
+    for value in (10, 20, 30, 40, 50, 60):  # capture catching up after a stall: a burst
         take(value)
+    up.jobs.join()
+    assert shown == [(10, 8, "bt601"), (20, 8, "bt601"), (30, 8, "bt601")] and "too slow" not in up.status
+    take(70)  # and it carries on
     up.close()
-    assert [value for value, _, _ in shown] == [10, 20, 30, 40, 50, 60]  # none lost, in order
-    assert [width for _, width, _ in shown] == [8, 8, 8, 8, 4, 4] and "too slow" in up.status
+    assert shown[-1] == (70, 8, "bt601")
+
+
+def test_an_upscaler_too_slow_for_the_rate_stands_down_and_is_tried_again(monkeypatch):
+    monkeypatch.setattr(ai.upscale, "SPELL", 0.05)
+    renderer = Renderer()
+    renderer.ai_upscale = "nvidia-high"
+    up, take, shown = upscaling(renderer, Stalled)
+    for value in range(1, 31):  # frames kept piling up for longer than that
+        take(value)
+    assert shown[-1][:2] == (30, 4) and "too slow" in up.status
+    assert [value for value, _, _ in shown] == sorted(value for value, _, _ in shown)
+    up.until = 0.0  # the rest is over
+    take(31)
+    up.close()
+    assert shown[-1] == (31, 8, "bt601")
 
 
 def test_a_failing_upscaler_still_lets_the_frame_through():
