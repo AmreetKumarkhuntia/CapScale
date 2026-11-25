@@ -54,6 +54,10 @@ if ($Runtime -eq "auto") {
 
 $repo = Split-Path -Parent $PSScriptRoot
 $pack = Join-Path $env:LOCALAPPDATA "CapScale\ai"
+# Moved to another drive and linked from here: the folder it points at is used, because
+# run by the installer Windows refuses a link a user made (see "python" below)
+$link = Get-Item $pack -ErrorAction SilentlyContinue
+if ($link.Target) { $pack = @($link.Target)[0] }
 $work = Join-Path $env:TEMP "capscale-ai"
 New-Item -ItemType Directory -Force $pack, $work | Out-Null
 # downloads and the Python that runs build_ai_model.py live in $work, so deleting it leaves nothing behind
