@@ -225,7 +225,7 @@ Escape close   F1 settings   F3 split   audio 54 ms
 | Method offers only Built-in, AI upscale is greyed out | the AI download is not installed, or for AI upscale the card is not an NVIDIA RTX | run **CapScale AI setup**, then restart |
 | No NVIDIA choices after an update | the AI download is from before they existed | run **CapScale AI setup** again; it adds them |
 | `AI frames: preparing the model` | first use of this capture size | wait a minute or two |
-| `AI frames: N ms each, too slow for this rate - built-in used` | the model cannot finish a frame in its slot | lower the target, or keep the built-in method |
+| `AI frames: N ms each, too slow for this rate - built-in used` | the model cannot finish a frame in its slot | lower the target, or pick a faster model. With AI upscale on, frames are generated at the enlarged size, where RIFE is too slow on an RTX 5070: NVIDIA Low or Medium fit. The built-in method, used meanwhile, tears fast-moving things |
 | `AI frames: <format> video is not handled - built-in used` | the card delivers YUY2 or 4:2:2 | the AI method takes 4:2:0 only (MJPEG, NV12) |
 | `AI upscale: N ms a frame, too slow for this rate - the app's own upscaler is used` | the level cannot finish a frame before the next is due. It is tried again by itself after a while | pick a lower level, or a lighter frame generation model |
 | `AI upscale: the picture is not being enlarged at this size` | the window is no larger than the capture | nothing to do: there is nothing to upscale |
