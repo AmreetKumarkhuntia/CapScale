@@ -78,7 +78,17 @@ if (-not $uv) {
     }
     $uv = "$work\uv.exe"
 }
-Step "python" { & $uv python install 3.12 }
+# Run by the installer, Windows refuses junctions a user made (os error 448) and uv's install
+# ends by making one; the Python is in place by then, so its exit code is not trusted and
+# every step names that Python by its path, never through the junction
+Write-Host "== python"
+$ErrorActionPreference = "Continue"
+& $uv python install 3.12 --no-bin --no-registry
+$ErrorActionPreference = "Stop"
+$py = Get-ChildItem "$work\uv-python" -Directory -Filter "cpython-3.12.*" |
+    Where-Object { -not $_.LinkType -and (Test-Path "$($_.FullName)\python.exe") } | Select-Object -First 1
+if (-not $py) { throw "python failed (exit $LASTEXITCODE)" }
+$py = "$($py.FullName)\python.exe"
 
 # Both runtimes are a package called onnxruntime, so one cannot be installed over the other
 $had = if (Test-Path "$pack\site\tensorrt_libs") { "nvidia" } elseif (Test-Path "$pack\site\onnxruntime") { "directml" }
@@ -88,7 +98,7 @@ if ($had -and $had -ne $Runtime) {
 $packages = $runtimes[$Runtime]
 # NVIDIA's own index holds the files of its packages; PyPI only has pointers to them
 Step "runtime ($Runtime)" {
-    & $uv pip install --python 3.12 --target "$pack\site" --extra-index-url https://pypi.nvidia.com $packages
+    & $uv pip install --python $py --target "$pack\site" --extra-index-url https://pypi.nvidia.com $packages
 }
 
 Step "model ($Model)" { curl.exe -sSL --fail -o "$work\model.7z" $source.url }
@@ -99,7 +109,7 @@ Step "unpack" { & "$env:SystemRoot\System32\tar.exe" -xf "$work\model.7z" -C $wo
 Step "prepare the model" {
     # what TensorRT prepared from an earlier model must not be used for the new one
     if (Test-Path "$pack\engines") { Remove-Item -Recurse -Force "$pack\engines" }
-    & $uv run --no-project --python 3.12 --with onnx python "$PSScriptRoot\build_ai_model.py" `
+    & $uv run --no-project --python $py --with onnx python "$PSScriptRoot\build_ai_model.py" `
         "$work\$($source.file)" "$pack\$Model.onnx"
 }
 # this model's file name from before models had names
