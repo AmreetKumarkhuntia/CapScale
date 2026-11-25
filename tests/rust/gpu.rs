@@ -467,6 +467,56 @@ fn overlays_stay_steady_in_a_noisy_scene() {
     }
 }
 
+/// A moving picture whose fine detail is not the same from one frame to the next, as
+/// an AI upscaler or a capture card's compression leaves it: the panning scene with
+/// strong grain of its own on every frame.
+fn grainy(time: f32) -> Image {
+    let seed = (time * 2.0).round() as i32;
+    let mut image = scene_panning(time, (9.4, 3.7));
+    for (i, rgb) in image.iter_mut().enumerate() {
+        let (px, py) = (i as i32 % W as i32, i as i32 / W as i32);
+        let grain = (hash(px + seed * 7919, py - seed * 104729) - 0.5) * 0.4;
+        *rgb = rgb.map(|c| (c + grain).clamp(0.0, 1.0));
+    }
+    image
+}
+
+#[test]
+fn detail_that_differs_between_frames_does_not_come_out_as_specks() {
+    let Some(mut gpu) = Gpu::new() else {
+        eprintln!("no GPU here, skipping");
+        return;
+    };
+    let step = |new_frame, phase| Step {
+        new_frame,
+        generating: true,
+        phase,
+    };
+    gpu.push(&grainy(0.0));
+    gpu.draw(step(true, None));
+    for n in 1..=3 {
+        gpu.push(&grainy(n as f32));
+        let generated = gpu.draw(step(true, Some(0.5)));
+        gpu.draw(step(false, None));
+        let truth = scene_panning(n as f32 - 0.5, (9.4, 3.7));
+        // a speck: a pixel far from what it should be, away from the picture's edge
+        let specks = (20..H - 20)
+            .flat_map(|y| (20..W - 20).map(move |x| (y * W + x) as usize))
+            .filter(|&i| (0..3).any(|c| (generated[i][c] - truth[i][c]).abs() > 0.2))
+            .count() as f32
+            * 100.0
+            / ((W - 40) * (H - 40)) as f32;
+        eprintln!(
+            "frame {n}: specks on {specks:.2}% of the picture, {:.1} dB",
+            psnr(&generated, &truth)
+        );
+        assert!(
+            specks < 1.5,
+            "frame {n}: specks on {specks:.2}% of the picture"
+        );
+    }
+}
+
 #[test]
 fn a_hud_zone_shows_the_real_frame_while_the_rest_is_generated() {
     let Some(mut gpu) = Gpu::new() else {

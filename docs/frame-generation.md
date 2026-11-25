@@ -113,14 +113,23 @@ patches of the two frames under candidate motion vectors and keeps the best matc
 
 ### `interp.wgsl`: build the picture
 
-Both frames are moved along the vectors to the moment `t` and blended. Three
+Both frames are moved along the vectors to the moment `t` and blended. Four
 safeguards:
 
+- The vector used is the median of the 3x3 around the pixel. The search decides
+  each pixel on its own, and on fine texture (grass, gravel, an AI-upscaled
+  picture) it leaves small islands of wrong motion, each of which would show as a
+  speck.
 - At the picture's edge, content sliding in exists in only one frame; that frame
   is used alone.
 - Where the two moved frames disagree, the motion is wrong or something was
   covered up. There the nearer real frame is shown, unmoved. A repeated frame in
-  one spot is far less visible than a patch of wrongly moved picture.
+  one spot is far less visible than a patch of wrongly moved picture. The two are
+  compared over the area around the pixel: fine detail that is a pixel out of
+  line, or differs from frame to frame, differs at every pixel while showing the
+  same thing, and a choice made pixel by pixel there comes out as specks. Only
+  where a pixel is the same in both real frames (a HUD, a crosshair) does the
+  pixel alone decide.
 - Inside a HUD zone the nearer real frame is shown, untouched.
 
 ### Timing on the render thread
