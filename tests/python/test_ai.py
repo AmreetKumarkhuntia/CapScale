@@ -212,6 +212,22 @@ def test_an_upscaler_too_slow_for_the_rate_stands_down_and_is_tried_again(monkey
     assert shown[-1] == (50, 8, "bt601")
 
 
+def test_an_upscaler_that_frames_pile_up_behind_stands_down_at_once():
+    class Stalled(Scaler):
+        def enlarge(self, planes, matrix):
+            time.sleep(0.05)  # ten times the gap between frames, though `took` does not say so yet
+            return super().enlarge(planes, matrix)
+
+    renderer = Renderer()
+    renderer.ai_upscale = "nvidia-high"
+    up, take, shown = upscaling(renderer, Stalled)
+    for value in (10, 20, 30, 40, 50, 60):
+        take(value)
+    up.close()
+    assert [value for value, _, _ in shown] == [10, 20, 30, 40, 50, 60]  # none lost, in order
+    assert [width for _, width, _ in shown] == [8, 8, 8, 8, 4, 4] and "too slow" in up.status
+
+
 def test_a_failing_upscaler_still_lets_the_frame_through():
     class Broken(Scaler):
         def enlarge(self, planes, matrix):

@@ -9,6 +9,7 @@ from . import nvidia
 from .framegen import planes_of
 
 SLOW_FRAMES = 30  # this many frames in a row that took longer than the gap between frames: too slow
+BEHIND = 2  # or this many frames waiting behind the one being enlarged: the picture is that far late already
 REST = 10.0  # seconds it then stands down before trying again; doubled each time, up to five minutes
 
 
@@ -59,7 +60,8 @@ class Upscale:
             return
         self.status = f"AI upscale: {scaler.took * 1e3:.0f} ms a frame"
         self.slow = self.slow + 1 if scaler.took > self.gap else 0
-        if self.slow >= SLOW_FRAMES:  # stand down, then try again: what slowed it may have passed
+        # stand down, then try again: what slowed it may have passed
+        if self.slow >= SLOW_FRAMES or self.jobs.qsize() >= BEHIND:
             self.slow, self.slow_ms, self.until, self.rest = 0, scaler.took * 1e3, now + self.rest, min(self.rest * 2, 300.0)
         self.jobs.put((show, scaler, planes, height, full_range, matrix, decode_ms, now))
 
